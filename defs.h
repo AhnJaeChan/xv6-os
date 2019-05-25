@@ -9,6 +9,8 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct spinlock;
+struct heap_t;
 
 // bio.c
 void            binit(void);
@@ -120,6 +122,7 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+void            swapproc(struct proc **p1, struct proc **p2);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
@@ -188,3 +191,5 @@ void            clearpteu(pde_t *pgdir, char *uva);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
+
+#define NULL 0

@@ -27,6 +27,9 @@ OBJS = \
 	uart.o\
 	vectors.o\
 	vm.o\
+	stride.o\
+	minheap.o\
+
 
 # Cross-compiling (e.g., on Mac OS X)
 TOOLPREFIX = i386-elf-
