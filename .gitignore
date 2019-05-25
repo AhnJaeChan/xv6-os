@@ -1,9 +1,10 @@
 # Mac OS
 *.DS_Store
 
-# Directories
+# CLion
 cmake-build-debug/
 .idea/
+CMakeLists.txt
 
 # xv6
 *~
