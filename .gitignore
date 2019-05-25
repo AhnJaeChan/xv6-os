@@ -1,3 +1,11 @@
+# Mac OS
+*.DS_Store
+
+# Directories
+cmake-build-debug/
+.idea/
+
+# xv6
 *~
 _*
 *.o
@@ -14,4 +22,3 @@ kernel
 kernelmemfs
 mkfs
 .gdbinit
-.idea
