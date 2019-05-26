@@ -7,19 +7,19 @@
 
 #include "minheap.h"
 
-#define STRIDE1   1048576 // 1 << 20
-#define TICKET1   1024
-#define MAX_SHARE  20
+#define STRIDE1           1048576 // 1 << 20
+#define TICKET1           1024
+#define MAX_STRIDE_SHARE  20
 
-// Stride struct
-typedef struct stride_t {
+typedef struct stride_config_t {
   uint ticket;
   uint stride;
   uint pass;
   uint share;
-} stride_t;
+} stride_config_t;
 
-void stride_set_ticket(stride_t *, uint);
+void stride_init_config(stride_config_t *);
+void stride_set_ticket(stride_config_t *, uint);
 void stride_set_share(struct proc *, uint);
 void stride_rearrange(heap_t *);
 uint stride_count_default_tickets(heap_t *);
