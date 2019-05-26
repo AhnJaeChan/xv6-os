@@ -101,18 +101,18 @@ sys_yield(void)
 int
 sys_cpu_share(void)
 {
-  int n;
-  if(argint(0, &n) < 0)
+  int x;
+  if(argint(0, &x) < 0)
     return -1;
 
-  if (n == 0) {
+  if (x == 0) {
     return 0;
-  } else if (n < 0) {
+  } else if (x < 0) {
     return -1;
   }
 
-  if(cpu_share(n) < 0) {
-    cprintf("[pid: %d] cpu_share(%d) failed. Exceeds the maximum amount.\n", myproc()->pid, n);
+  if(cpu_share(x) < 0) {
+    cprintf("[pid: %d] cpu_share(%d) failed. Exceeds the maximum amount.\n", myproc()->pid, x);
     return -1;
   }
 
@@ -122,6 +122,7 @@ sys_cpu_share(void)
 int
 sys_run_MLFQ(void)
 {
+  run_MLFQ();
   return 0;
 }
 
