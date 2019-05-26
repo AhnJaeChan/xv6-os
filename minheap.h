@@ -17,8 +17,6 @@ typedef struct heap_t {
   uint sz;
 } heap_t;
 
-heap_t pheap;
-
 void heap_init(heap_t *);
 
 int heap_push(heap_t *, struct proc *);
