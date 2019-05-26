@@ -408,9 +408,6 @@ scheduler(void) {
     }
 
     if (p->state != RUNNABLE) {
-      if (p->stride_config.pass != INFINITE) {
-        p->stride_config.pass = INFINITE;
-      }
       heap_push(&pheap, p);
       goto release;
     }
