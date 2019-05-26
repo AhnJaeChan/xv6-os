@@ -16,6 +16,8 @@ struct {
 } ptable;
 
 static struct proc *initproc;
+static struct proc *mlfqproc;
+static struct mlfq_t mlfq;
 
 int nextpid = 1;
 extern void forkret(void);
@@ -25,7 +27,7 @@ static void wakeup1(void *chan);
 
 void
 printproc(struct proc *p) {
-  cprintf("(%d): pass: %d, stride: %d\n", p->pid, p->config.pass, p->config.stride);
+  cprintf("(%d): pass: %d, stride: %d\n", p->pid, p->stride_config.pass, p->stride_config.stride);
 }
 
 void printheap(void) {
@@ -130,7 +132,8 @@ found:
 
   // Set scheduling variables
   p->type = DEFAULT;
-  stride_set_ticket(&p->config, TICKET1);
+  stride_init_config(&p->stride_config);
+  mlfq_init_config(&p->mlfq_config);
 
   return p;
 }
@@ -161,17 +164,42 @@ userinit(void) {
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
 
-  // Init pheap for stride scheduling
-  heap_init(&pheap);
-
   // this assignment to p->state lets other cores
   // run this process. the acquire forces the above
   // writes to be visible, and the lock is also needed
   // because the assignment might not be atomic.
   acquire(&ptable.lock);
 
-  heap_push(&pheap, p);
   p->state = RUNNABLE;
+
+  release(&ptable.lock);
+}
+
+
+void strideinit(void) {
+  // Init pheap for stride scheduling
+  heap_init(&pheap);
+
+  acquire(&ptable.lock);
+
+  heap_push(&pheap, initproc);
+
+  release(&ptable.lock);
+}
+
+void mlfqinit(void) {
+  mlfqproc = allocproc(); // Stays at the state EMBRYO so that it's occupied.
+  mlfqproc->parent = initproc;
+
+  pheap.share = MLFQ_SHARE;
+  stride_set_share(mlfqproc, MLFQ_SHARE);
+
+  mlfq_init(&mlfq);
+
+  acquire(&ptable.lock);
+
+  heap_push(&pheap, mlfqproc);
+  stride_rearrange(&pheap);
 
   release(&ptable.lock);
 }
@@ -232,7 +260,7 @@ fork(void) {
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
   pid = np->pid;
-  np->config.pass = heap_peek_pass(&pheap);
+  np->stride_config.pass = heap_peek_pass(&pheap);
 
   acquire(&ptable.lock);
 
@@ -293,8 +321,8 @@ exit(void) {
 
   // Rearrange tickets for shared portions.
   if (curproc->type == STRIDE) {
-    pheap.share -= curproc->config.share;
-    curproc->config.share = 0; // reset share
+    pheap.share -= curproc->stride_config.share;
+    curproc->stride_config.share = 0; // reset share
     stride_rearrange(&pheap);
   }
 
@@ -373,9 +401,15 @@ scheduler(void) {
       goto release;
     }
 
+    if (p == mlfqproc) {
+      p->stride_config.pass += p->stride_config.stride;
+      heap_push(&pheap, p);
+      goto release;
+    }
+
     if (p->state != RUNNABLE) {
-      if (p->config.pass != INFINITE) {
-        p->config.pass = INFINITE;
+      if (p->stride_config.pass != INFINITE) {
+        p->stride_config.pass = INFINITE;
       }
       heap_push(&pheap, p);
       goto release;
@@ -387,7 +421,7 @@ scheduler(void) {
     c->proc = p;
 
     // Put it back to the stride scheduler
-    p->config.pass += p->config.stride;
+    p->stride_config.pass += p->stride_config.stride;
     heap_push(&pheap, p);
 
     switchuvm(p);
@@ -537,7 +571,7 @@ wakeup1(void *chan) {
 
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if (p->state == SLEEPING && p->chan == chan) {
-      // Set pass before re-entering the heap
+      // Set pass to match current runnable processes
       if ((idx = heap_search(&pheap, p)) < 0) {
         panic("proc not found");
       }
@@ -629,24 +663,75 @@ int cpu_share(int x) {
   }
 
   share = pheap.share;
-  if (p->type == STRIDE) {
-    share -= p->config.share;
+
+  switch (p->type) {
+    case STRIDE:
+      // x includes itself
+      x -= p->stride_config.share;
+      break;
+    case MLFQ:
+      // Delete process from MLFQ
+      mlfq_delete(&mlfq, p);
+
+      // Insert process to STRIDE scheduler
+      p->stride_config.pass = INFINITE;
+      heap_push(&pheap, p);
+      break;
+    case DEFAULT:
+      break;
+    default:
+      return -1;
   }
 
-  if (share + x > MAX_SHARE) {
+  if (share + x > MAX_STRIDE_SHARE + MLFQ_SHARE) {
     return -1;
   }
 
   acquire(&ptable.lock);
+
   pheap.share = share + x;
   stride_set_share(p, x);
   stride_rearrange(&pheap);
+
   release(&ptable.lock);
 
   return 0;
 }
 
-void swap(struct proc **p1, struct proc **p2) {
+int run_MLFQ(void) {
+  struct proc *p = myproc();
+
+  if (p == mlfqproc) {
+    return -1;
+  }
+
+  acquire(&ptable.lock);
+
+  switch (p->type) {
+    case DEFAULT:
+    case STRIDE:
+      // Delete process from STRIDE scheduler
+      heap_delete(&pheap, p);
+      pheap.share -= p->stride_config.share; // Default will have 0 as share
+      p->stride_config.share = 0;
+      stride_rearrange(&pheap);
+
+      // Insert process to MLFQ
+      mlfq_init_config(&p->mlfq_config);
+      mlfq_push(&mlfq, p);
+    case MLFQ: // Do nothing
+      break;
+    default:
+      release(&ptable.lock);
+      return -1;
+  }
+
+  release(&ptable.lock);
+
+  return 0;
+}
+
+void swapproc(struct proc **p1, struct proc **p2) {
   struct proc *tmp = *p1;
   *p1 = *p2;
   *p2 = tmp;
