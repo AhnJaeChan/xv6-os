@@ -119,11 +119,14 @@ void            sched(void);
 void            setproc(struct proc*);
 void            sleep(void*, struct spinlock*);
 void            userinit(void);
+void            strideinit(void);
+void            mlfqinit(void);
 int             wait(void);
 void            wakeup(void*);
-void            swap(struct proc **, struct proc **);
+void            swapproc(struct proc **, struct proc **);
 void            yield(void);
 int             cpu_share(int);
+int             run_MLFQ(void);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
@@ -192,5 +195,3 @@ void            clearpteu(pde_t *pgdir, char *uva);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
-
-#define NULL 0
