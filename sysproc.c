@@ -122,12 +122,11 @@ sys_cpu_share(void)
 int
 sys_run_MLFQ(void)
 {
-  run_MLFQ();
-  return 0;
+  return run_MLFQ();
 }
 
 int
 sys_getlev(void)
 {
-  return 0;
+  return getlev();
 }
