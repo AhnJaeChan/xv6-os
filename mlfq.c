@@ -15,6 +15,7 @@ void mlfq_init(mlfq_t *mlfq) {
 }
 
 void mlfq_push(mlfq_t *mlfq, struct proc *p) {
+  p->type = MLFQ;
   enqueue(&mlfq->queue[0], p);
 }
 
@@ -38,6 +39,40 @@ int mlfq_delete(mlfq_t *mlfq, struct proc *p) {
     }
   }
   return -1;
+}
+
+void mlfq_downlevel(mlfq_t *mlfq, struct proc *p) {
+  p->mlfq_config.quantum = 0;
+  p->mlfq_config.allotment = 0;
+
+  p->mlfq_config.level++;
+  if (p->mlfq_config.level >= MLFQ_LEVELS) {
+    p->mlfq_config.level = MLFQ_LEVELS;
+  }
+
+  enqueue(&mlfq->queue[p->mlfq_config.level], p);
+}
+
+void mlfq_round_robin(mlfq_t *mlfq, struct proc *p) {
+  p->mlfq_config.quantum = 0;
+  enqueue(&mlfq->queue[p->mlfq_config.level], p);
+}
+
+void mlfq_boost(mlfq_t *mlfq) {
+  struct proc *p;
+  queue_t *q;
+  int i;
+  uint size;
+
+  for (q = mlfq->queue; q < &mlfq->queue[MLFQ_LEVELS]; ++q) {
+    size = q->size;
+    for (i = 0; i < size; ++i) {
+      p = dequeue(q);
+      mlfq_init_config(&p->mlfq_config);
+      enqueue(&mlfq->queue[0], p);
+    }
+  }
+  mlfq->ticks = 0;
 }
 
 void mlfq_init_config(mlfq_config_t *config) {
