@@ -22,8 +22,6 @@ int enqueue(queue_t *q, struct proc *p) {
     return -1;
   }
 
-  p->type = MLFQ;
-
   q->parr[(q->front + q->size) % QUEUE_SIZE] = p;
   q->size++;
 
