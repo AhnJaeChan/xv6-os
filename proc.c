@@ -17,7 +17,9 @@ struct {
 
 static struct proc *initproc;
 static struct proc *mlfqproc;
-static struct mlfq_t mlfq;
+
+mlfq_t pmlfq;
+heap_t pheap;
 
 int nextpid = 1;
 extern void forkret(void);
@@ -37,6 +39,23 @@ void printheap(void) {
   for (i = 0; i < pheap.sz; ++i) {
     cprintf("[%d] ", i);
     printproc(pheap.parr[i]);
+  }
+  cprintf("\n");
+}
+
+void printqueue(queue_t *q) {
+  int i;
+  for (i = 0; i < q->size; ++i) {
+    cprintf("(%d) -> ", q->parr[(q->front + i) % QUEUE_SIZE]->pid);
+  }
+  cprintf("\n");
+}
+
+void printmlfq(mlfq_t *mlfq) {
+  int i;
+  for (i = 0; i < MLFQ_LEVELS; ++i) {
+    cprintf("[LEVEL %d]: ", i);
+    printqueue(&mlfq->queue[i]);
   }
   cprintf("\n");
 }
@@ -194,7 +213,7 @@ void mlfqinit(void) {
   pheap.share = MLFQ_SHARE;
   stride_set_share(mlfqproc, MLFQ_SHARE);
 
-  mlfq_init(&mlfq);
+  mlfq_init(&pmlfq);
 
   acquire(&ptable.lock);
 
@@ -317,12 +336,15 @@ exit(void) {
     }
   }
 
-  heap_delete(&pheap, curproc);
+  if (curproc->type == MLFQ) {
+    mlfq_delete(&pmlfq, curproc);
+    mlfq_init_config(&curproc->mlfq_config);
+  } else {
+    heap_delete(&pheap, curproc);
 
-  // Rearrange tickets for shared portions.
-  if (curproc->type == STRIDE) {
-    pheap.share -= curproc->stride_config.share;
-    curproc->stride_config.share = 0; // reset share
+    // Rearrange tickets due to total ticket count change
+    pheap.share -= curproc->stride_config.share; // DEFAULT has 0 for share
+    curproc->stride_config.share = 0;
     stride_rearrange(&pheap);
   }
 
@@ -402,21 +424,41 @@ scheduler(void) {
     }
 
     if (p == mlfqproc) {
+      // Increment pass by stride.
       heap_set_pass(&pheap, 0, p->stride_config.pass + p->stride_config.stride);
-      goto release;
-    }
 
-    if (p->state != RUNNABLE) {
-      goto release;
+      // Dequeue one from the pmlfq
+      p = mlfq_pop(&pmlfq);
+
+      // MLFQ is empty
+      if (p == NULL) {
+        goto release;
+      }
+
+      if (p->state != RUNNABLE) {
+        goto release;
+      }
+
+      if (p->mlfq_config.allotment >= pmlfq.queue[p->mlfq_config.level].allotment) {
+        // Go down level
+        mlfq_downlevel(&pmlfq, p);
+      } else {
+        // Round Robin
+        mlfq_round_robin(&pmlfq, p);
+      }
+    } else {
+      if (p->state != RUNNABLE) {
+        goto release;
+      }
+
+      // Increment pass by stride.
+      heap_set_pass(&pheap, 0, p->stride_config.pass + p->stride_config.stride);
     }
 
     // Switch to chosen process.  It is the process's job
     // to release ptable.lock and then reacquire it
     // before jumping back to us.
     c->proc = p;
-
-    // Increment pass by stride.
-    heap_set_pass(&pheap, 0, p->stride_config.pass + p->stride_config.stride);
 
     switchuvm(p);
     p->state = RUNNING;
@@ -537,7 +579,9 @@ sleep(void *chan, struct spinlock *lk) {
     release(lk);
   }
 
-  heap_set_pass(&pheap, heap_search(&pheap, p), INFINITE);
+  if (p->type == STRIDE || p->type == DEFAULT) {
+    heap_set_pass(&pheap, heap_search(&pheap, p), INFINITE);
+  }
 
   // Go to sleep.
   p->chan = chan;
@@ -665,7 +709,8 @@ int cpu_share(int x) {
       break;
     case MLFQ:
       // Delete process from MLFQ
-      mlfq_delete(&mlfq, p);
+      mlfq_delete(&pmlfq, p);
+      mlfq_init_config(&p->mlfq_config);
 
       // Insert process to STRIDE scheduler
       p->stride_config.pass = INFINITE;
@@ -706,13 +751,15 @@ int run_MLFQ(void) {
     case STRIDE:
       // Delete process from STRIDE scheduler
       heap_delete(&pheap, p);
-      pheap.share -= p->stride_config.share; // Default will have 0 as share
+
+      // Rearrange tickets due to total ticket count change
+      pheap.share -= p->stride_config.share; // DEFAULT has 0 for share
       p->stride_config.share = 0;
       stride_rearrange(&pheap);
 
       // Insert process to MLFQ
       mlfq_init_config(&p->mlfq_config);
-      mlfq_push(&mlfq, p);
+      mlfq_push(&pmlfq, p);
     case MLFQ: // Do nothing
       break;
     default:
@@ -720,9 +767,18 @@ int run_MLFQ(void) {
       return -1;
   }
 
+  cprintf("Run MLFQ!\n");
+  printproc(p);
+  printmlfq(&pmlfq);
+  printheap();
+
   release(&ptable.lock);
 
   return 0;
+}
+
+int getlev(void) {
+  return myproc()->type == MLFQ ? myproc()->mlfq_config.level : -1;
 }
 
 void swapproc(struct proc **p1, struct proc **p2) {
