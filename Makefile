@@ -29,6 +29,8 @@ OBJS = \
 	vm.o\
 	stride.o\
 	minheap.o\
+	queue.o\
+	mlfq.o\
 
 
 # Cross-compiling (e.g., on Mac OS X)
