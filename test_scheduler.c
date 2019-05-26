@@ -12,7 +12,7 @@
 
 #define MLFQ_LEVEL		(3)	/* Number of level(priority) of MLFQ scheduler */
 
-#define WORKLOAD_NUM	(3) /* The number of workloads */
+#define WORKLOAD_NUM	(5) /* The number of workloads */
 
 
 
@@ -179,9 +179,9 @@ main(int argc, char *argv[])
 		/* Process scheduled by Stride scheduler, use 15% of CPU resources */
 		{test_stride, 15},
 		/* Process scheduled by MLFQ scheduler, does not yield itself */
-//		{test_mlfq, MLFQ_LEVCNT},
+		{test_mlfq, MLFQ_LEVCNT},
 		/* Process scheduled by MLFQ scheduler, does not yield itself */
-//		{test_mlfq, MLFQ_NONE},
+		{test_mlfq, MLFQ_NONE},
 		/* Process scheduled by default scheduler */
 		{test_default, 0},
 	};
