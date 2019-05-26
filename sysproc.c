@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
+#include "stride.h"
 
 int
 sys_fork(void)
@@ -100,6 +101,21 @@ sys_yield(void)
 int
 sys_cpu_share(void)
 {
+  int n;
+  if(argint(0, &n) < 0)
+    return -1;
+
+  if (n == 0) {
+    return 0;
+  } else if (n < 0) {
+    return -1;
+  }
+
+  if(cpu_share(n) < 0) {
+    cprintf("[pid: %d] cpu_share(%d) failed. Exceeds the maximum amount.\n", myproc()->pid, n);
+    return -1;
+  }
+
   return 0;
 }
 

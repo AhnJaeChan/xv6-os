@@ -130,7 +130,7 @@ found:
 
   // Set scheduling variables
   p->type = DEFAULT;
-  stride_set_default(&p->config);
+  stride_set_ticket(&p->config, TICKET1);
 
   return p;
 }
@@ -237,6 +237,12 @@ fork(void) {
   acquire(&ptable.lock);
 
   heap_push(&pheap, np);
+
+  // Rearrange tickets for shared portions.
+  if (pheap.share != 0) {
+    stride_rearrange(&pheap);
+  }
+
   np->state = RUNNABLE;
 
   release(&ptable.lock);
@@ -283,10 +289,14 @@ exit(void) {
     }
   }
 
-  cprintf("---Curproc---\n");
-  printproc(curproc);
   heap_delete(&pheap, curproc);
-  printheap();
+
+  // Rearrange tickets for shared portions.
+  if (curproc->type == STRIDE) {
+    pheap.share -= curproc->config.share;
+    curproc->config.share = 0; // reset share
+    stride_rearrange(&pheap);
+  }
 
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
@@ -528,7 +538,10 @@ wakeup1(void *chan) {
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if (p->state == SLEEPING && p->chan == chan) {
       // Set pass before re-entering the heap
-      idx = heap_search(&pheap, p);
+      if ((idx = heap_search(&pheap, p)) < 0) {
+        panic("proc not found");
+      }
+
       heap_set_pass(&pheap, idx, heap_peek_pass(&pheap));
 
       p->state = RUNNABLE;
@@ -607,8 +620,33 @@ procdump(void) {
   }
 }
 
+int cpu_share(int x) {
+  struct proc *p = myproc();
+  int share;
 
-void swapproc(struct proc **p1, struct proc **p2) {
+  if (x < 0) {
+    return -1;
+  }
+
+  share = pheap.share;
+  if (p->type == STRIDE) {
+    share -= p->config.share;
+  }
+
+  if (share + x > MAX_SHARE) {
+    return -1;
+  }
+
+  acquire(&ptable.lock);
+  pheap.share = share + x;
+  stride_set_share(p, x);
+  stride_rearrange(&pheap);
+  release(&ptable.lock);
+
+  return 0;
+}
+
+void swap(struct proc **p1, struct proc **p2) {
   struct proc *tmp = *p1;
   *p1 = *p2;
   *p2 = tmp;

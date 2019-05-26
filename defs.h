@@ -121,8 +121,9 @@ void            sleep(void*, struct spinlock*);
 void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
+void            swap(struct proc **, struct proc **);
 void            yield(void);
-void            swapproc(struct proc **p1, struct proc **p2);
+int             cpu_share(int);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

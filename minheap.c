@@ -2,19 +2,18 @@
 // Created by 안재찬 on 2019-05-25.
 //
 
+#include "minheap.h"
 #include "types.h"
 #include "defs.h"
 #include "param.h"
-#include "memlayout.h"
 #include "mmu.h"
-#include "x86.h"
-#include "minheap.h"
 #include "proc.h"
 
 void heap_init(heap_t *h) {
   for (int i = 0; i < MAX_HEAP_SIZE; ++i) {
     h->parr[i] = NULL;
   }
+  h->share = 0;
   h->sz = 0;
 }
 
@@ -28,8 +27,8 @@ int heap_push(heap_t *h, struct proc *p) {
 
   h->parr[i] = p;
 
-  while (i != 0 && h->parr[heap_parent(i)]->config.pass > h->parr[i]->config.pass) {
-    swapproc(&h->parr[heap_parent(i)], &h->parr[i]);
+  while (i != 0 && h->parr[heap_parent(i)]->config.pass >= h->parr[i]->config.pass) {
+    swap(&h->parr[heap_parent(i)], &h->parr[i]);
     i = heap_parent(i);
   }
 
@@ -88,7 +87,7 @@ void heapify(heap_t *h, int i) {
   }
 
   if (smallest != i) {
-    swapproc(&h->parr[smallest], &h->parr[i]);
+    swap(&h->parr[smallest], &h->parr[i]);
     heapify(h, smallest);
   }
 }
@@ -117,10 +116,17 @@ int heap_search(heap_t *h, struct proc *p) {
 }
 
 void heap_set_pass(heap_t *h, int i, uint pass) {
-  h->parr[i]->config.pass = pass;
-  while (i != 0 && h->parr[heap_parent(i)]->config.pass >= h->parr[i]->config.pass) {
-    swapproc(&h->parr[i], &h->parr[heap_parent(i)]);
-    i = heap_parent(i);
+  if (pass < h->parr[i]->config.pass) {
+    h->parr[i]->config.pass = pass;
+
+    while (i != 0 && h->parr[heap_parent(i)]->config.pass >= h->parr[i]->config.pass) {
+      swap(&h->parr[i], &h->parr[heap_parent(i)]);
+      i = heap_parent(i);
+    }
+  } else {
+    h->parr[i]->config.pass = pass;
+
+    heapify(h, i);
   }
 }
 

@@ -10,11 +10,10 @@
 
 #define MAX_HEAP_SIZE NPROC
 
-struct proc;
-
 // minheap
 typedef struct heap_t {
   struct proc *parr[MAX_HEAP_SIZE]; // Proc array
+  uint share;
   uint sz;
 } heap_t;
 
