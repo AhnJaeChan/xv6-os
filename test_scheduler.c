@@ -12,7 +12,7 @@
 
 #define MLFQ_LEVEL		(3)	/* Number of level(priority) of MLFQ scheduler */
 
-#define WORKLOAD_NUM	(7) /* The number of workloads */
+#define WORKLOAD_NUM	(3) /* The number of workloads */
 
 
 
