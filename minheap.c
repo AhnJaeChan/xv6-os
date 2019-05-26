@@ -27,8 +27,8 @@ int heap_push(heap_t *h, struct proc *p) {
 
   h->parr[i] = p;
 
-  while (i != 0 && h->parr[heap_parent(i)]->config.pass >= h->parr[i]->config.pass) {
-    swap(&h->parr[heap_parent(i)], &h->parr[i]);
+  while (i != 0 && h->parr[heap_parent(i)]->stride_config.pass >= h->parr[i]->stride_config.pass) {
+    swapproc(&h->parr[heap_parent(i)], &h->parr[i]);
     i = heap_parent(i);
   }
 
@@ -70,7 +70,7 @@ uint heap_peek_pass(heap_t *h) {
     return 0;
   }
 
-  return p->config.pass;
+  return p->stride_config.pass;
 }
 
 void heapify(heap_t *h, int i) {
@@ -78,16 +78,16 @@ void heapify(heap_t *h, int i) {
   int right = heap_right(i);
   int smallest = i;
 
-  if (left < h->sz && h->parr[left]->config.pass < h->parr[i]->config.pass) {
+  if (left < h->sz && h->parr[left]->stride_config.pass < h->parr[i]->stride_config.pass) {
     smallest = left;
   }
 
-  if (right < h->sz && h->parr[right]->config.pass < h->parr[smallest]->config.pass) {
+  if (right < h->sz && h->parr[right]->stride_config.pass < h->parr[smallest]->stride_config.pass) {
     smallest = right;
   }
 
   if (smallest != i) {
-    swap(&h->parr[smallest], &h->parr[i]);
+    swapproc(&h->parr[smallest], &h->parr[i]);
     heapify(h, smallest);
   }
 }
@@ -116,15 +116,15 @@ int heap_search(heap_t *h, struct proc *p) {
 }
 
 void heap_set_pass(heap_t *h, int i, uint pass) {
-  if (pass < h->parr[i]->config.pass) {
-    h->parr[i]->config.pass = pass;
+  if (pass < h->parr[i]->stride_config.pass) {
+    h->parr[i]->stride_config.pass = pass;
 
-    while (i != 0 && h->parr[heap_parent(i)]->config.pass >= h->parr[i]->config.pass) {
-      swap(&h->parr[i], &h->parr[heap_parent(i)]);
+    while (i != 0 && h->parr[heap_parent(i)]->stride_config.pass >= h->parr[i]->stride_config.pass) {
+      swapproc(&h->parr[i], &h->parr[heap_parent(i)]);
       i = heap_parent(i);
     }
   } else {
-    h->parr[i]->config.pass = pass;
+    h->parr[i]->stride_config.pass = pass;
 
     heapify(h, i);
   }
