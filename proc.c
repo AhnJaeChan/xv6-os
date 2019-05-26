@@ -395,20 +395,18 @@ scheduler(void) {
 
     acquire(&ptable.lock);
 
-    p = heap_pop(&pheap);
+    p = heap_peek(&pheap);
 
     if (p == NULL) {
       goto release;
     }
 
     if (p == mlfqproc) {
-      p->stride_config.pass += p->stride_config.stride;
-      heap_push(&pheap, p);
+      heap_set_pass(&pheap, 0, p->stride_config.pass + p->stride_config.stride);
       goto release;
     }
 
     if (p->state != RUNNABLE) {
-      heap_push(&pheap, p);
       goto release;
     }
 
@@ -417,9 +415,8 @@ scheduler(void) {
     // before jumping back to us.
     c->proc = p;
 
-    // Put it back to the stride scheduler
-    p->stride_config.pass += p->stride_config.stride;
-    heap_push(&pheap, p);
+    // Increment pass by stride.
+    heap_set_pass(&pheap, 0, p->stride_config.pass + p->stride_config.stride);
 
     switchuvm(p);
     p->state = RUNNING;
