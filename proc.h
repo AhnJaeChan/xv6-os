@@ -1,4 +1,5 @@
 #include "stride.h"
+#include "mlfq.h"
 
 // Per-CPU state
 struct cpu {
@@ -60,7 +61,8 @@ struct proc {
 
   // Scheduling
   enum proctype type;
-  struct stride_t config;
+  stride_config_t stride_config;
+  mlfq_config_t mlfq_config;
 };
 
 // Process memory is laid out contiguously, low addresses first:
