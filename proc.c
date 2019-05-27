@@ -16,7 +16,7 @@ struct {
 } ptable;
 
 static struct proc *initproc;
-static struct proc *mlfqproc;
+struct proc *mlfqproc;
 
 mlfq_t pmlfq;
 heap_t pheap;
@@ -29,7 +29,18 @@ static void wakeup1(void *chan);
 
 void
 printproc(struct proc *p) {
-  cprintf("(%d): pass: %d, stride: %d\n", p->pid, p->stride_config.pass, p->stride_config.stride);
+  if (p == NULL) {
+    return;
+  }
+
+  if (p->type == STRIDE || p->type == DEFAULT) {
+    cprintf("[STRIDE] (%d): pass: %d, stride: %d, state: %d %s\n", p->pid, p->stride_config.pass,
+            p->stride_config.stride,
+            p->state, p == mlfqproc ? "MLFQ" : "");
+  } else {
+    cprintf("[MLFQ] (%d): level: %d, quantum: %d, allotment: %d\n", p->pid, p->mlfq_config.level,
+            p->mlfq_config.quantum, p->mlfq_config.allotment);
+  }
 }
 
 void printheap(void) {
@@ -58,6 +69,11 @@ void printmlfq(mlfq_t *mlfq) {
     printqueue(&mlfq->queue[i]);
   }
   cprintf("\n");
+}
+
+void printsched(void) {
+  printheap();
+  printmlfq(&pmlfq);
 }
 
 void
@@ -209,6 +225,7 @@ void strideinit(void) {
 void mlfqinit(void) {
   mlfqproc = allocproc(); // Stays at the state EMBRYO so that it's occupied.
   mlfqproc->parent = initproc;
+  safestrcpy(mlfqproc->name, "mlfqproc", sizeof(mlfqproc->name));
 
   pheap.share = MLFQ_SHARE;
   stride_set_share(mlfqproc, MLFQ_SHARE);
@@ -221,6 +238,23 @@ void mlfqinit(void) {
   stride_rearrange(&pheap);
 
   release(&ptable.lock);
+//
+//  mlfq_push(&pmlfq, allocproc());
+//  struct proc *p = allocproc();
+//  mlfq_push(&pmlfq, p);
+//  mlfq_push(&pmlfq, allocproc());
+//  printmlfq(&pmlfq);
+//
+//  p = mlfq_pop(&pmlfq);
+//  printproc(p);
+//
+//  mlfq_downlevel(&pmlfq, p);
+//  printmlfq(&pmlfq);
+//
+//  if (mlfq_delete(&pmlfq, p) < 0)  {
+//    cprintf("TEST");
+//  }
+//  printmlfq(&pmlfq);
 }
 
 // Grow current process's memory by n bytes.
@@ -279,15 +313,19 @@ fork(void) {
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
 
   pid = np->pid;
-  np->stride_config.pass = heap_peek_pass(&pheap);
 
   acquire(&ptable.lock);
 
-  heap_push(&pheap, np);
+  if (curproc->type == MLFQ) {
+    mlfq_push(&pmlfq, np);
+  } else {
+    np->stride_config.pass = heap_peek_pass(&pheap);
+    heap_push(&pheap, np);
 
-  // Rearrange tickets for shared portions.
-  if (pheap.share != 0) {
-    stride_rearrange(&pheap);
+    // Rearrange tickets for shared portions.
+    if (pheap.share != 0) {
+      stride_rearrange(&pheap);
+    }
   }
 
   np->state = RUNNABLE;
@@ -337,8 +375,9 @@ exit(void) {
   }
 
   if (curproc->type == MLFQ) {
-    mlfq_delete(&pmlfq, curproc);
-    mlfq_init_config(&curproc->mlfq_config);
+    if (mlfq_delete(&pmlfq, curproc) == 0) {
+      mlfq_init_config(&curproc->mlfq_config);
+    }
   } else {
     heap_delete(&pheap, curproc);
 
@@ -424,10 +463,10 @@ scheduler(void) {
     }
 
     if (p == mlfqproc) {
-      // Increment pass by stride.
+      // Increment mlfqproc pass by stride
       heap_set_pass(&pheap, 0, p->stride_config.pass + p->stride_config.stride);
 
-      // Dequeue one from the pmlfq
+      // Dequeue one from the mlfq
       p = mlfq_pop(&pmlfq);
 
       // MLFQ is empty
@@ -436,6 +475,7 @@ scheduler(void) {
       }
 
       if (p->state != RUNNABLE) {
+        mlfq_round_robin(&pmlfq, p);
         goto release;
       }
 
@@ -579,6 +619,10 @@ sleep(void *chan, struct spinlock *lk) {
     release(lk);
   }
 
+  if (p == mlfqproc) {
+    panic("MLFQ  sleeping");
+  }
+
   if (p->type == STRIDE || p->type == DEFAULT) {
     heap_set_pass(&pheap, heap_search(&pheap, p), INFINITE);
   }
@@ -610,11 +654,9 @@ wakeup1(void *chan) {
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if (p->state == SLEEPING && p->chan == chan) {
       // Set pass to match current runnable processes
-      if ((idx = heap_search(&pheap, p)) < 0) {
-        panic("proc not found");
+      if ((idx = heap_search(&pheap, p)) != -1) {
+        heap_set_pass(&pheap, idx, heap_peek_pass(&pheap));
       }
-
-      heap_set_pass(&pheap, idx, heap_peek_pass(&pheap));
 
       p->state = RUNNABLE;
     }
@@ -644,7 +686,9 @@ kill(int pid) {
       if (p->state == SLEEPING) {
         // Set pass before re-entering the heap
         idx = heap_search(&pheap, p);
-        heap_set_pass(&pheap, idx, heap_peek_pass(&pheap));
+        if (idx != -1) {
+          heap_set_pass(&pheap, idx, heap_peek_pass(&pheap));
+        }
 
         p->state = RUNNABLE;
       }
@@ -709,8 +753,9 @@ int cpu_share(int x) {
       break;
     case MLFQ:
       // Delete process from MLFQ
-      mlfq_delete(&pmlfq, p);
-      mlfq_init_config(&p->mlfq_config);
+      if (mlfq_delete(&pmlfq, p) == 0) {
+        mlfq_init_config(&p->mlfq_config);
+      }
 
       // Insert process to STRIDE scheduler
       p->stride_config.pass = INFINITE;
@@ -766,12 +811,6 @@ int run_MLFQ(void) {
       release(&ptable.lock);
       return -1;
   }
-
-  cprintf("Run MLFQ!\n");
-  printproc(p);
-  printmlfq(&pmlfq);
-  printheap();
-
   release(&ptable.lock);
 
   return 0;

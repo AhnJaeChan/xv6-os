@@ -130,3 +130,10 @@ sys_getlev(void)
 {
   return getlev();
 }
+
+int
+sys_printsched(void)
+{
+  printsched();
+  return 0;
+}

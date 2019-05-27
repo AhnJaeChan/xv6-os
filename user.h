@@ -27,6 +27,7 @@ int yield(void);
 int cpu_share(int);
 int run_MLFQ(void);
 int getlev(void);
+int printsched(void);
 
 // ulib.c
 int stat(const char*, struct stat*);

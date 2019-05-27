@@ -128,6 +128,7 @@ void            yield(void);
 int             cpu_share(int);
 int             run_MLFQ(void);
 int             getlev(void);
+void            printsched(void);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

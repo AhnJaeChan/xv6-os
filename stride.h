@@ -8,7 +8,7 @@
 #include "minheap.h"
 
 #define STRIDE1           1048576 // 1 << 20
-#define TICKET1           1024
+#define TICKET1           1024 // 1 << 18
 #define MAX_STRIDE_SHARE  20
 
 typedef struct stride_config_t {

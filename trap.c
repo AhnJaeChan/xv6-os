@@ -103,16 +103,16 @@ trap(struct trapframe *tf) {
 
     // Default and Stride schedulers need to yield every tick.
     if (myproc()->type == MLFQ) {
-      if(pmlfq.ticks == BOOST_PERIOD) {
+      myproc()->mlfq_config.quantum++;
+      myproc()->mlfq_config.allotment++;
+      pmlfq.ticks++;
+
+      if (pmlfq.ticks == BOOST_PERIOD) {
         mlfq_boost(&pmlfq);
         yield();
       } else if (myproc()->mlfq_config.quantum >= pmlfq.queue[myproc()->mlfq_config.level].quantum) {
         // Time quantum has been used, RR or down level is called.
         yield();
-      } else {
-        myproc()->mlfq_config.quantum++;
-        myproc()->mlfq_config.allotment++;
-        pmlfq.ticks++;
       }
     } else {
       yield();

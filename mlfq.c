@@ -47,7 +47,7 @@ void mlfq_downlevel(mlfq_t *mlfq, struct proc *p) {
 
   p->mlfq_config.level++;
   if (p->mlfq_config.level >= MLFQ_LEVELS) {
-    p->mlfq_config.level = MLFQ_LEVELS;
+    p->mlfq_config.level = MLFQ_LEVELS - 1;
   }
 
   enqueue(&mlfq->queue[p->mlfq_config.level], p);

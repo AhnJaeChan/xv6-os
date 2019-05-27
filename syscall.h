@@ -24,3 +24,4 @@
 #define SYS_cpu_share 23
 #define SYS_run_MLFQ  24
 #define SYS_getlev    25
+#define SYS_printsched 26

@@ -66,7 +66,7 @@ uint heap_peek_pass(heap_t *h) {
 
   if (p == NULL) {
     return INFINITE;
-  } else if (p->state != RUNNABLE) {
+  } else if (p != mlfqproc && p->state != RUNNABLE) {
     return 0;
   }
 

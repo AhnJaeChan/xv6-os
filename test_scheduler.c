@@ -8,7 +8,7 @@
 #include "user.h"
 
 #define LIFETIME		(1000)	/* (ticks) */
-#define COUNT_PERIOD	(1000)	/* (iteration) */
+#define COUNT_PERIOD	(10000)	/* (iteration) */
 
 #define MLFQ_LEVEL		(3)	/* Number of level(priority) of MLFQ scheduler */
 

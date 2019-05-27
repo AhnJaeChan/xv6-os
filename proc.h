@@ -67,6 +67,7 @@ struct proc {
 
 extern mlfq_t pmlfq;
 extern heap_t pheap;
+extern struct proc *mlfqproc;
 
 // Process memory is laid out contiguously, low addresses first:
 //   text
