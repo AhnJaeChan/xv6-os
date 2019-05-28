@@ -31,6 +31,7 @@ OBJS = \
 	minheap.o\
 	queue.o\
 	mlfq.o\
+	thread.o\
 
 
 # Cross-compiling (e.g., on Mac OS X)
