@@ -60,7 +60,7 @@ argptr(int n, char **pp, int size)
 {
   int i;
   struct proc *curproc = myproc();
- 
+
   if(argint(n, &i) < 0)
     return -1;
   if(size < 0 || (uint)i >= curproc->sz || (uint)i+size > curproc->sz)
@@ -108,6 +108,10 @@ extern int sys_cpu_share(void);
 extern int sys_run_MLFQ(void);
 extern int sys_getlev(void);
 extern int sys_printsched(void);
+extern int sys_thread_create(void);
+extern int sys_thread_join(void);
+extern int sys_thread_exit(void);
+
 
 static int (*syscalls[])(void) = {
 [SYS_fork]        sys_fork,
@@ -136,6 +140,9 @@ static int (*syscalls[])(void) = {
 [SYS_run_MLFQ]    sys_run_MLFQ,
 [SYS_getlev]      sys_getlev,
 [SYS_printsched]  sys_printsched,
+[SYS_thread_create] sys_thread_create,
+[SYS_thread_join]   sys_thread_join,
+[SYS_thread_exit]   sys_thread_exit,
 };
 
 void

@@ -25,3 +25,6 @@
 #define SYS_run_MLFQ  24
 #define SYS_getlev    25
 #define SYS_printsched 26
+#define SYS_thread_create 27
+#define SYS_thread_join 28
+#define SYS_thread_exit 29

@@ -137,3 +137,21 @@ sys_printsched(void)
   printsched();
   return 0;
 }
+
+int
+sys_thread_create(void)
+{
+  return 0;
+}
+
+int
+sys_thread_join(void)
+{
+  return 0;
+}
+
+int
+sys_thread_exit(void)
+{
+  return 0;
+}
