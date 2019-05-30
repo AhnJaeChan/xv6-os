@@ -4,22 +4,12 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "x86.h"
-#include "proc.h"
 #include "spinlock.h"
-#include "minheap.h"
+#include "proc.h"
+#include "gvar.h"
 
-#define STRIDEMODE
-
-struct {
-  struct spinlock lock;
-  struct proc proc[NPROC];
-} ptable;
 
 static struct proc *initproc;
-struct proc *mlfqproc;
-
-mlfq_t pmlfq;
-heap_t pheap;
 
 int nextpid = 1;
 extern void forkret(void);
@@ -43,17 +33,6 @@ printproc(struct proc *p) {
   }
 }
 
-void printheap(void) {
-  int i;
-
-  cprintf("-----Heap(%d)-----\n", pheap.sz);
-  for (i = 0; i < pheap.sz; ++i) {
-    cprintf("[%d] ", i);
-    printproc(pheap.parr[i]);
-  }
-  cprintf("\n");
-}
-
 void printqueue(queue_t *q) {
   int i;
   for (i = 0; i < q->size; ++i) {
@@ -71,8 +50,23 @@ void printmlfq(mlfq_t *mlfq) {
   cprintf("\n");
 }
 
+void printheap(heap_t *heap) {
+  int i;
+
+  cprintf("-----Heap(%d)-----\n", heap->sz);
+  for (i = 0; i < heap->sz; ++i) {
+    cprintf("[%d] ", i);
+    printproc(heap->parr[i]);
+    if (heap->parr[i]->threads.size != 0) {
+      cprintf("\t");
+      printqueue(&heap->parr[i]->threads);
+    }
+  }
+  cprintf("\n");
+}
+
 void printsched(void) {
-  printheap();
+  printheap(&pheap);
   printmlfq(&pmlfq);
 }
 
@@ -124,10 +118,11 @@ myproc(void) {
 // If found, change state to EMBRYO and initialize
 // state required to run in the kernel.
 // Otherwise return 0.
-static struct proc *
+struct proc *
 allocproc(void) {
   struct proc *p;
   char *sp;
+  int i;
 
   acquire(&ptable.lock);
 
@@ -169,6 +164,14 @@ found:
   p->type = DEFAULT;
   stride_init_config(&p->stride_config);
   mlfq_init_config(&p->mlfq_config);
+
+  for (i = 0; i < MAX_THREADS; ++i) {
+    thread_init_config(&p->thread_pool[i]);
+  }
+
+  p->is_thread = 0;
+  p->thread_config = thread_alloc_config(p);
+  enqueue(&p->threads, p); // Enqueue main thread
 
   return p;
 }
@@ -238,23 +241,6 @@ void mlfqinit(void) {
   stride_rearrange(&pheap);
 
   release(&ptable.lock);
-//
-//  mlfq_push(&pmlfq, allocproc());
-//  struct proc *p = allocproc();
-//  mlfq_push(&pmlfq, p);
-//  mlfq_push(&pmlfq, allocproc());
-//  printmlfq(&pmlfq);
-//
-//  p = mlfq_pop(&pmlfq);
-//  printproc(p);
-//
-//  mlfq_downlevel(&pmlfq, p);
-//  printmlfq(&pmlfq);
-//
-//  if (mlfq_delete(&pmlfq, p) < 0)  {
-//    cprintf("TEST");
-//  }
-//  printmlfq(&pmlfq);
 }
 
 // Grow current process's memory by n bytes.
@@ -387,6 +373,8 @@ exit(void) {
     stride_rearrange(&pheap);
   }
 
+  queue_clear(&curproc->threads);
+
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
   sched();
@@ -446,54 +434,49 @@ wait(void) {
 //      via swtch back to the scheduler.
 void
 scheduler(void) {
-  struct proc *p;
+  struct proc *p, *parent, *tparent;
   struct cpu *c = mycpu();
   c->proc = 0;
 
-#ifdef STRIDEMODE
   for (;;) {
     sti();
 
     acquire(&ptable.lock);
 
-    p = heap_peek(&pheap);
+    parent = tparent = heap_peek(&pheap);
 
-    if (p == NULL) {
+    if (parent == NULL) {
       goto release;
     }
 
-    if (p == mlfqproc) {
-      // Increment mlfqproc pass by stride
-      heap_set_pass(&pheap, 0, p->stride_config.pass + p->stride_config.stride);
+    if (parent == mlfqproc) {
+      tparent = mlfq_pop(&pmlfq);
 
-      // Dequeue one from the mlfq
-      p = mlfq_pop(&pmlfq);
-
-      // MLFQ is empty
-      if (p == NULL) {
+      if (tparent == NULL) {
+        heap_set_pass(&pheap, 0, parent->stride_config.pass + parent->stride_config.stride);
         goto release;
       }
+    }
 
-      if (p->state != RUNNABLE) {
-        mlfq_round_robin(&pmlfq, p);
-        goto release;
-      }
+    p = dequeue(&tparent->threads);
+    enqueue(&tparent->threads, p);
 
-      if (p->mlfq_config.allotment >= pmlfq.queue[p->mlfq_config.level].allotment) {
+    if (p->state != RUNNABLE) {
+      heap_set_pass(&pheap, 0, parent->stride_config.pass + parent->stride_config.stride);
+      goto release;
+    }
+
+    if (tparent->type == MLFQ) {
+      if (tparent->mlfq_config.allotment >= pmlfq.queue[tparent->mlfq_config.level].allotment) {
         // Go down level
-        mlfq_downlevel(&pmlfq, p);
+        mlfq_downlevel(&pmlfq, tparent);
       } else {
         // Round Robin
-        mlfq_round_robin(&pmlfq, p);
+        mlfq_round_robin(&pmlfq, tparent);
       }
-    } else {
-      if (p->state != RUNNABLE) {
-        goto release;
-      }
-
-      // Increment pass by stride.
-      heap_set_pass(&pheap, 0, p->stride_config.pass + p->stride_config.stride);
     }
+
+    heap_set_pass(&pheap, 0, parent->stride_config.pass + parent->stride_config.stride);
 
     // Switch to chosen process.  It is the process's job
     // to release ptable.lock and then reacquire it
@@ -512,34 +495,6 @@ scheduler(void) {
 release:
     release(&ptable.lock);
   }
-#else
-  for (;;) {
-    // Enable interrupts on this processor.
-    sti();
-
-    // Loop over process table looking for process to run.
-    acquire(&ptable.lock);
-    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-      if (p->state != RUNNABLE)
-        continue;
-
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
-    }
-    release(&ptable.lock);
-  }
-#endif
 }
 
 // Enter scheduler.  Must hold only ptable.lock
@@ -623,13 +578,13 @@ sleep(void *chan, struct spinlock *lk) {
     panic("MLFQ  sleeping");
   }
 
-  if (p->type == STRIDE || p->type == DEFAULT) {
-    heap_set_pass(&pheap, heap_search(&pheap, p), INFINITE);
-  }
-
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
+
+  printproc(p);
+  printqueue(&p->threads);
+  printsched();
 
   sched();
 

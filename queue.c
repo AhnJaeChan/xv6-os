@@ -2,9 +2,11 @@
 // Created by 안재찬 on 2019-05-26.
 //
 
-#include "queue.h"
+#include "types.h"
+#include "param.h"
 #include "mmu.h"
 #include "proc.h"
+#include "queue.h"
 
 void queue_init(queue_t *q, uint quantum, uint allotment) {
   queue_clear(q);
@@ -18,7 +20,7 @@ void queue_clear(queue_t *q) {
 }
 
 int enqueue(queue_t *q, struct proc *p) {
-  if (q->size == QUEUE_SIZE) {
+  if (p == NULL || q->size == QUEUE_SIZE) {
     return -1;
   }
 
@@ -75,4 +77,15 @@ int queue_search(queue_t *q, struct proc *p) {
     }
   }
   return INFINITE;
+}
+
+struct proc *queue_fetch(queue_t *q, int pid) {
+  int i;
+
+  for (i = 0; i < q->size; ++i) {
+    if (q->parr[(q->front + i) % QUEUE_SIZE]->pid == pid) {
+      return q->parr[(q->front + i) % QUEUE_SIZE];
+    }
+  }
+  return NULL;
 }

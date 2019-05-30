@@ -5,8 +5,25 @@
 #ifndef XV6_PUBLIC_THREAD_H
 #define XV6_PUBLIC_THREAD_H
 
-#include "types.h"
+#define MAX_THREADS 8
 
-typedef uint thread_t;
+struct proc;
+
+enum threadstate {
+  FREE, WORKING
+};
+
+typedef struct thread_config_t {
+  uint sp;
+  int valid;
+  enum threadstate state;
+} thread_config_t;
+
+void thread_init_config(thread_config_t *);
+thread_config_t *thread_alloc_config(struct proc *);
+
+int thread_create(thread_t *, void *(void *), void *);
+int thread_join(thread_t, void **);
+void thread_exit(void *);
 
 #endif //XV6_PUBLIC_THREAD_H

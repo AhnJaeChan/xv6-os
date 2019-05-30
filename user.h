@@ -28,6 +28,9 @@ int cpu_share(int);
 int run_MLFQ(void);
 int getlev(void);
 int printsched(void);
+int thread_create(thread_t*, void *(void *), void*);
+int thread_join(thread_t, void**);
+void thread_exit(void*);
 
 // ulib.c
 int stat(const char*, struct stat*);

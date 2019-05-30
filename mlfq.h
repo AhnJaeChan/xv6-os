@@ -5,8 +5,6 @@
 #ifndef XV6_PUBLIC_MLFQ_H
 #define XV6_PUBLIC_MLFQ_H
 
-#include "queue.h"
-
 #define MLFQ_SHARE       20
 #define MLFQ_LEVELS       3
 #define BOOST_PERIOD    100

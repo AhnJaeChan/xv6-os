@@ -5,9 +5,6 @@
 #ifndef XV6_PUBLIC_MINHEAP_H
 #define XV6_PUBLIC_MINHEAP_H
 
-#include "types.h"
-#include "param.h"
-
 #define MAX_HEAP_SIZE NPROC
 
 // minheap

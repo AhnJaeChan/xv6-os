@@ -5,9 +5,6 @@
 #ifndef XV6_PUBLIC_QUEUE_H
 #define XV6_PUBLIC_QUEUE_H
 
-#include "types.h"
-#include "param.h"
-
 #define QUEUE_SIZE NPROC
 
 // Static queue
@@ -28,5 +25,6 @@ struct proc *dequeue(queue_t *);
 
 int queue_delete(queue_t *, struct proc *);
 int queue_search(queue_t *, struct proc *);
+struct proc *queue_fetch(queue_t *, int);
 
 #endif //XV6_PUBLIC_QUEUE_H

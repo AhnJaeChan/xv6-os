@@ -2,12 +2,15 @@
 // Created by 안재찬 on 2019-05-25.
 //
 
-#include "minheap.h"
 #include "types.h"
+#include "param.h"
 #include "defs.h"
 #include "param.h"
 #include "mmu.h"
 #include "proc.h"
+#include "spinlock.h"
+#include "gvar.h"
+#include "minheap.h"
 
 void heap_init(heap_t *h) {
   for (int i = 0; i < MAX_HEAP_SIZE; ++i) {

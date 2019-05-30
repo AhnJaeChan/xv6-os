@@ -11,6 +11,8 @@ struct stat;
 struct superblock;
 struct spinlock;
 struct heap_t;
+struct queue_t;
+struct mlfq_t;
 
 // bio.c
 void            binit(void);
@@ -105,6 +107,7 @@ int             pipewrite(struct pipe*, char*, int);
 
 //PAGEBREAK: 16
 // proc.c
+struct proc*    allocproc(void);
 int             cpuid(void);
 void            exit(void);
 int             fork(void);
@@ -128,6 +131,11 @@ void            yield(void);
 int             cpu_share(int);
 int             run_MLFQ(void);
 int             getlev(void);
+
+void            printproc(struct proc *);
+void            printqueue(struct queue_t *);
+void            printmlfq(struct mlfq_t *);
+void            printheap(struct heap_t *);
 void            printsched(void);
 
 // swtch.S

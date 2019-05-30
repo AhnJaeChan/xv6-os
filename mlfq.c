@@ -2,8 +2,11 @@
 // Created by 안재찬 on 2019-05-26.
 //
 
-#include "mlfq.h"
+#include "types.h"
+#include "param.h"
 #include "mmu.h"
+#include "queue.h"
+#include "mlfq.h"
 #include "proc.h"
 
 void mlfq_init(mlfq_t *mlfq) {

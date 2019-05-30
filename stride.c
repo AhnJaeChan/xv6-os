@@ -2,10 +2,12 @@
 // Created by 안재찬 on 2019-05-25.
 //
 
-#include "stride.h"
+#include "types.h"
 #include "param.h"
 #include "mmu.h"
+#include "minheap.h"
 #include "proc.h"
+#include "stride.h"
 
 void stride_init_config(stride_config_t *config) {
   stride_set_ticket(config, TICKET1);

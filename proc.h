@@ -1,5 +1,10 @@
+#include "minheap.h"
 #include "stride.h"
+#include "queue.h"
 #include "mlfq.h"
+#include "thread.h"
+
+struct spinlock;
 
 // Per-CPU state
 struct cpu {
@@ -63,11 +68,16 @@ struct proc {
   enum proctype type;
   stride_config_t stride_config;
   mlfq_config_t mlfq_config;
+
+  // Thread
+  int is_thread;
+  thread_config_t *thread_config; // Points one of the thread pool
+
+  // Only used by main thread
+  thread_config_t thread_pool[MAX_THREADS];
+  queue_t threads; // Round Robin in main process
 };
 
-extern mlfq_t pmlfq;
-extern heap_t pheap;
-extern struct proc *mlfqproc;
 
 // Process memory is laid out contiguously, low addresses first:
 //   text
