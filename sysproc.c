@@ -143,9 +143,7 @@ sys_thread_create(void) {
     return -1;
   }
 
-  cprintf("Thread CREATE\n");
-
-  return tcreate(thread, start_routine, arg);
+  return thread_create(thread, start_routine, arg);
 }
 
 int
@@ -161,30 +159,19 @@ sys_thread_join(void) {
     return -1;
   }
 
-  cprintf("Thread JOIN\n");
-
-  return tjoin((thread_t) thread, (void **) retval);
+  return thread_join((thread_t) thread, (void **) retval);
 }
 
 int
 sys_thread_exit(void) {
   int retval;
 
-  printproc(myproc());
-  cprintf("esp: %d\n", myproc()->tf->esp);
-  cprintf("sz: %d\n", myproc()->sz);
-  cprintf("parent esp: %d\n", myproc()->parent->tf->esp);
-  cprintf("parent sz: %d\n", myproc()->parent->sz);
-
-
   if (argint(0, &retval) < 0) {
     cprintf("Something wrong with thread exit\n");
     return -1;
   }
 
-  cprintf("Thread EXIT\n");
-
-  texit((void *) retval);
+  thread_exit((void *) retval);
 
   return 0;
 }

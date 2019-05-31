@@ -18,6 +18,7 @@ extern void trapret(void);
 void
 printproc(struct proc *p) {
   if (p == NULL) {
+    cprintf("NULL\n");
     return;
   }
 
@@ -57,10 +58,6 @@ void printheap(heap_t *heap) {
   for (i = 0; i < heap->sz; ++i) {
     cprintf("[%d] ", i);
     printproc(heap->parr[i]);
-    if (heap->parr[i]->threads.size != 0) {
-      cprintf("\t");
-      printqueue(&heap->parr[i]->threads);
-    }
   }
   cprintf("\n");
 }
@@ -245,7 +242,7 @@ void mlfqinit(void) {
 // Return 0 on success, -1 on failure.
 int
 growproc(int n) {
-  uint sz;
+  uint sz, i;
   struct proc *curproc = myproc();
 
   if (curproc->is_thread) {
@@ -262,7 +259,13 @@ growproc(int n) {
   }
   curproc->sz = sz;
 
-
+  acquire(&ptable.lock);
+  for (i = 0; i < MAX_THREADS; ++i) {
+    if (curproc->thread_pool[i].state == WORKING) {
+      curproc->thread_pool[i].thread->sz = curproc->sz;
+    }
+  }
+  release(&ptable.lock);
 
   switchuvm(curproc);
   return 0;
@@ -342,9 +345,26 @@ exit(void) {
     curproc = curproc->parent;
   }
 
-  // Close all open files in threads.
-  for (i = 0; i < curproc->threads.size; ++i) {
-    p = curproc->threads.parr[(curproc->threads.front + i) % QUEUE_SIZE];
+  cprintf("EXIT\n");
+
+  // Deschedule every thread
+  for (i = 0; i < MAX_THREADS; ++i) {
+    p = curproc->thread_pool[i].thread;
+    if (p == NULL || p->state == ZOMBIE) continue;
+
+    if (p->type == MLFQ) {
+      if (mlfq_delete(&pmlfq, p) == 0) {
+        mlfq_init_config(&p->mlfq_config);
+      }
+    } else {
+      heap_delete(&pheap, p);
+
+      // Rearrange tickets due to total ticket count change
+      pheap.share -= p->stride_config.share; // DEFAULT has 0 for share
+      p->stride_config.share = 0;
+      stride_rearrange(&pheap);
+    }
+
     for (fd = 0; fd < NOFILE; fd++) {
       if (p->ofile[fd]) {
         fileclose(p->ofile[fd]);
@@ -356,6 +376,17 @@ exit(void) {
     iput(p->cwd);
     end_op();
     p->cwd = 0;
+
+    thread_clear(p);
+  }
+
+  // Close all open files in threads.
+  for (i = 0; i < MAX_THREADS; ++i) {
+    p = curproc->thread_pool[i].thread;
+
+    if (p != NULL && p->state != ZOMBIE) {
+      printproc(p);
+    }
   }
 
   // Close all open files.
@@ -373,26 +404,6 @@ exit(void) {
 
   acquire(&ptable.lock);
 
-  while ((p = queue_front(&curproc->threads)) != NULL) {
-    thread_clear(p);
-
-    // Delete from parent thread queue
-    dequeue(&curproc->threads);
-
-    if (p->type == MLFQ) {
-      if (mlfq_delete(&pmlfq, p) == 0) {
-        mlfq_init_config(&p->mlfq_config);
-      }
-    } else {
-      heap_delete(&pheap, p);
-
-      // Rearrange tickets due to total ticket count change
-      pheap.share -= p->stride_config.share; // DEFAULT has 0 for share
-      p->stride_config.share = 0;
-      stride_rearrange(&pheap);
-    }
-  }
-
   // Parent might be sleeping in wait().
   wakeup1(curproc->parent);
 
@@ -405,6 +416,7 @@ exit(void) {
     }
   }
 
+  // Deschedule current process
   if (curproc->type == MLFQ) {
     if (mlfq_delete(&pmlfq, curproc) == 0) {
       mlfq_init_config(&curproc->mlfq_config);
@@ -417,8 +429,6 @@ exit(void) {
     curproc->stride_config.share = 0;
     stride_rearrange(&pheap);
   }
-
-  queue_clear(&curproc->threads);
 
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;

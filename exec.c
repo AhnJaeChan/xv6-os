@@ -102,7 +102,6 @@ exec(char *path, char **argv)
   switchuvm(curproc);
   freevm(oldpgdir);
 
-  cprintf("PARENT: %d %d\n", curproc->tf->esp, curproc->sz);
   return 0;
 
  bad:

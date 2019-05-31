@@ -75,7 +75,6 @@ struct proc {
 
   // Only used by main thread
   thread_config_t thread_pool[MAX_THREADS];
-  queue_t threads; // Round Robin in main process
 };
 
 

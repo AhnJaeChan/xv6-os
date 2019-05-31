@@ -16,8 +16,10 @@
 
 void thread_init_config(thread_config_t *config) {
   config->sp = 0;
+  config->thread = NULL;
   config->valid = 0;
   config->state = FREE;
+  config->retval = NULL;
 }
 
 thread_config_t *thread_alloc_config(struct proc *p) {
@@ -35,85 +37,99 @@ thread_config_t *thread_alloc_config(struct proc *p) {
   return config;
 }
 
-int tcreate(thread_t *thread, void *(*start_routine)(void *), void *arg) {
+struct proc *thread_fetch(struct proc *parent, thread_t thread) {
+  int i;
+
+  for (i = 0; i < MAX_THREADS; ++i) {
+    if (parent->thread_pool[i].thread->pid == thread) {
+      return parent->thread_pool[i].thread;
+    }
+  }
+
+  return NULL;
+}
+
+int thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg) {
   struct proc *np;
-  struct proc *curproc = myproc();
-  uint sp;
+  struct proc *parent = myproc();
+  uint sz, sp;
   uint ustack[3];
   int i;
   thread_config_t *config;
 
   if ((np = allocproc()) == 0) {
+    printproc(np);
     return -1;
   }
 
   // Main thread
-  if (curproc->is_thread) {
-    curproc = curproc->parent;
+  if (parent->is_thread) {
+    parent = parent->parent;
   }
 
-  // Allocate stack
-  config = thread_alloc_config(curproc);
+  // Set thread config
+  config = thread_alloc_config(parent);
   if (config == NULL) {
     goto tbad;
   }
 
+  // Allocate memory if there is no valid area in thread pool
+  sz = parent->sz;
   if (!config->valid) {
-    curproc->sz = PGROUNDUP(curproc->sz);
-    if ((curproc->sz = allocuvm(curproc->pgdir, curproc->sz, curproc->sz + 2 * PGSIZE)) == 0)
+    sz = PGROUNDUP(sz);
+    if ((sz = allocuvm(parent->pgdir, sz, sz + 2 * PGSIZE)) == 0) {
+      thread_init_config(config);
       goto tbad;
-    clearpteu(curproc->pgdir, (char *) (curproc->sz - 2 * PGSIZE));
+    }
+    clearpteu(parent->pgdir, (char *) (parent->sz - 2 * PGSIZE));
 
-    config->sp = sp = curproc->sz; // Set the process's new size
+    config->sp = sp = parent->sz; // Set the process's new size
     config->valid = 1;
   } else {
     sp = config->sp;
   }
-
-  memset((void *) (sp - PGSIZE), 0, PGSIZE);
+  config->thread = np;
+  np->thread_config = config;
 
   // Set up ustack
   ustack[0] = 0xffffffff;
-  ustack[1] = 1;
-  ustack[2] = (uint) arg;
+  ustack[1] = (uint) arg;
+  ustack[2] = 0;
 
   sp -= sizeof(ustack);
 
-  if (copyout(curproc->pgdir, sp, ustack, sizeof(ustack)) < 0) {
+  if (copyout(parent->pgdir, sp, ustack, sizeof(ustack)) < 0) {
     goto tbad;
   }
 
-  // Enqueue into thread queue
-  if (enqueue(&curproc->threads, np) < 0) {
-    goto tbad;
-  }
+  // Set up thread's property
+  np->pgdir = parent->pgdir;
+  np->parent = parent;
   np->is_thread = 1;
-
-  // Share page directory
-  np->pgdir = curproc->pgdir;
-  np->parent = curproc;
+  np->sz = parent->sz = sz;
 
   // Trapframe
-  *np->tf = *curproc->tf;
+  *np->tf = *parent->tf;
   np->tf->esp = sp; // Set esp to user stack pointer of the new thread
   np->tf->eip = (uint) start_routine; // Set eip to the function
-  np->sz = curproc->sz;
+  np->sz = parent->sz;
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
 
   for (i = 0; i < NOFILE; i++)
-    if (curproc->ofile[i])
-      np->ofile[i] = filedup(curproc->ofile[i]);
-  np->cwd = idup(curproc->cwd);
+    if (parent->ofile[i])
+      np->ofile[i] = filedup(parent->ofile[i]);
+  np->cwd = idup(parent->cwd);
 
-  safestrcpy(np->name, curproc->name, sizeof(curproc->name));
+  safestrcpy(np->name, parent->name, sizeof(parent->name));
 
   *thread = np->pid;
 
   acquire(&ptable.lock);
 
-  if (curproc->type == MLFQ) {
+  // Schedule the thread like a process
+  if (parent->type == MLFQ) {
     mlfq_push(&pmlfq, np);
   } else {
     np->stride_config.pass = heap_peek_pass(&pheap);
@@ -132,15 +148,11 @@ int tcreate(thread_t *thread, void *(*start_routine)(void *), void *arg) {
   return 0;
 
 tbad:
-  kfree(np->kstack);
-  np->kstack = 0;
-  np->state = UNUSED;
   return -1;
 }
 
-int tjoin(thread_t thread, void **retval) {
+int thread_join(thread_t thread, void **retval) {
   struct proc *p = NULL;
-  int pid;
   struct proc *parent = myproc();
 
   if (parent->is_thread) {
@@ -152,7 +164,7 @@ int tjoin(thread_t thread, void **retval) {
     // Find the thread with tid
     // if thread is killed or thread does not exist, return -1;
     // if it's zombie, clear out its variables and set the thread_config's state to free
-    p = queue_fetch(&parent->threads, thread);
+    p = thread_fetch(parent, thread);
 
     // Error, we don't have any matching thread.
     if (p == NULL) {
@@ -161,11 +173,32 @@ int tjoin(thread_t thread, void **retval) {
     }
 
     if (p->state == ZOMBIE) {
-      // Found one.
-      pid = thread_clear(p);
+      if (retval != NULL) {
+        *retval = p->thread_config->retval;
+      }
+
+      // Deschedule thread
+      if (p->type == MLFQ) {
+        if (mlfq_delete(&pmlfq, p) == 0) {
+          mlfq_init_config(&p->mlfq_config);
+        }
+      } else {
+        heap_delete(&pheap, p);
+
+        // Rearrange tickets due to total ticket count change
+        pheap.share -= p->stride_config.share; // DEFAULT has 0 for share
+        p->stride_config.share = 0;
+        stride_rearrange(&pheap);
+      }
+
+      stride_init_config(&p->stride_config);
+      mlfq_init_config(&p->mlfq_config);
+
+      // Clear thread
+      thread_clear(p);
 
       release(&ptable.lock);
-      return pid;
+      return 0;
     }
 
     if (parent->killed) {
@@ -177,18 +210,13 @@ int tjoin(thread_t thread, void **retval) {
   }
 }
 
-void texit(void *retval) {
+void thread_exit(void *retval) {
   struct proc *thread = myproc();
-  struct proc *parent;
   int fd;
-
-  cprintf("t");
 
   if (!thread->is_thread) {
     exit();
   }
-
-  parent = thread->parent;
 
   // Close all open files.
   for (fd = 0; fd < NOFILE; fd++) {
@@ -198,42 +226,29 @@ void texit(void *retval) {
     }
   }
 
+  printproc(thread);
   begin_op();
   iput(thread->cwd);
   end_op();
   thread->cwd = 0;
 
+  thread->thread_config->retval = retval;
+
   acquire(&ptable.lock);
-
-  // Delete from parent thread queue
-  queue_delete(&parent->threads, thread);
-
-  if (thread->type == MLFQ) {
-    if (mlfq_delete(&pmlfq, thread) == 0) {
-      mlfq_init_config(&thread->mlfq_config);
-    }
-  } else {
-    heap_delete(&pheap, thread);
-
-    // Rearrange tickets due to total ticket count change
-    pheap.share -= thread->stride_config.share; // DEFAULT has 0 for share
-    thread->stride_config.share = 0;
-    stride_rearrange(&pheap);
-  }
-
-  stride_init_config(&thread->stride_config);
-  mlfq_init_config(&thread->mlfq_config);
 
   thread->state = ZOMBIE;
 
   // Main thread might be sleeping in thread_join().
-  wakeup1(parent);
+  wakeup1(thread->parent);
 
   sched();
 }
 
 int thread_clear(struct proc *thread) {
   int pid;
+
+  thread->thread_config->thread = NULL;
+  thread->thread_config->state = FREE;
 
   // Found one.
   pid = thread->pid;
@@ -244,12 +259,6 @@ int thread_clear(struct proc *thread) {
   thread->name[0] = 0;
   thread->killed = 0;
   thread->state = UNUSED;
-
-  stride_init_config(&thread->stride_config);
-  mlfq_init_config(&thread->mlfq_config);
-
-  thread->thread_config->state = FREE;
-  thread->thread_config = NULL;
 
   return pid;
 }
