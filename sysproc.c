@@ -6,69 +6,61 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
-#include "stride.h"
 
 int
-sys_fork(void)
-{
+sys_fork(void) {
   return fork();
 }
 
 int
-sys_exit(void)
-{
+sys_exit(void) {
   exit();
   return 0;  // not reached
 }
 
 int
-sys_wait(void)
-{
+sys_wait(void) {
   return wait();
 }
 
 int
-sys_kill(void)
-{
+sys_kill(void) {
   int pid;
 
-  if(argint(0, &pid) < 0)
+  if (argint(0, &pid) < 0)
     return -1;
   return kill(pid);
 }
 
 int
-sys_getpid(void)
-{
+sys_getpid(void) {
   return myproc()->pid;
 }
 
 int
-sys_sbrk(void)
-{
+sys_sbrk(void) {
   int addr;
   int n;
 
-  if(argint(0, &n) < 0)
+  if (argint(0, &n) < 0)
     return -1;
   addr = myproc()->sz;
-  if(growproc(n) < 0)
+  if (growproc(n) < 0)
     return -1;
   return addr;
 }
 
 int
-sys_sleep(void)
-{
+sys_sleep(void) {
   int n;
   uint ticks0;
 
-  if(argint(0, &n) < 0)
+  if (argint(0, &n) < 0)
     return -1;
   acquire(&tickslock);
   ticks0 = ticks;
-  while(ticks - ticks0 < n){
-    if(myproc()->killed){
+  while (ticks - ticks0 < n) {
+    if (myproc()->killed) {
       release(&tickslock);
       return -1;
     }
@@ -81,8 +73,7 @@ sys_sleep(void)
 // return how many clock tick interrupts have occurred
 // since start.
 int
-sys_uptime(void)
-{
+sys_uptime(void) {
   uint xticks;
 
   acquire(&tickslock);
@@ -92,17 +83,15 @@ sys_uptime(void)
 }
 
 int
-sys_yield(void)
-{
+sys_yield(void) {
   yield();
   return 0;
 }
 
 int
-sys_cpu_share(void)
-{
+sys_cpu_share(void) {
   int x;
-  if(argint(0, &x) < 0)
+  if (argint(0, &x) < 0)
     return -1;
 
   if (x == 0) {
@@ -111,7 +100,7 @@ sys_cpu_share(void)
     return -1;
   }
 
-  if(cpu_share(x) < 0) {
+  if (cpu_share(x) < 0) {
     cprintf("[pid: %d] cpu_share(%d) failed. Exceeds the maximum amount.\n", myproc()->pid, x);
     return -1;
   }
@@ -120,50 +109,47 @@ sys_cpu_share(void)
 }
 
 int
-sys_run_MLFQ(void)
-{
+sys_run_MLFQ(void) {
   return run_MLFQ();
 }
 
 int
-sys_getlev(void)
-{
+sys_getlev(void) {
   return getlev();
 }
 
 int
-sys_printsched(void)
-{
+sys_printsched(void) {
   printsched();
   return 0;
 }
 
 
 int
-sys_thread_create(void)
-{
+sys_thread_create(void) {
   thread_t *thread;
   void *start_routine;
   void *arg;
 
-  if (argptr(0, (void*)&thread, sizeof(*thread)) < 0) {
+  if (argptr(0, (void *) &thread, sizeof(*thread)) < 0) {
     return -1;
   }
 
-  if (argptr(1, (void*)&start_routine, sizeof(*start_routine)) < 0) {
+  if (argptr(1, (void *) &start_routine, sizeof(*start_routine)) < 0) {
     return -1;
   }
 
-  if (argptr(2, (void*)&arg, sizeof(*arg)) < 0) {
+  if (argptr(2, (void *) &arg, sizeof(*arg)) < 0) {
     return -1;
   }
 
-  return thread_create(thread, start_routine, arg);
+  cprintf("Thread CREATE\n");
+
+  return tcreate(thread, start_routine, arg);
 }
 
 int
-sys_thread_join(void)
-{
+sys_thread_join(void) {
   int thread;
   int retval;
 
@@ -175,18 +161,30 @@ sys_thread_join(void)
     return -1;
   }
 
-  return thread_join((thread_t)thread,(void**)retval);
+  cprintf("Thread JOIN\n");
+
+  return tjoin((thread_t) thread, (void **) retval);
 }
 
 int
-sys_thread_exit(void)
-{
-  void *retval;
+sys_thread_exit(void) {
+  int retval;
 
-  if(argptr(0, (void*)&retval, sizeof(*retval)) < 0) {
+  printproc(myproc());
+  cprintf("esp: %d\n", myproc()->tf->esp);
+  cprintf("sz: %d\n", myproc()->sz);
+  cprintf("parent esp: %d\n", myproc()->parent->tf->esp);
+  cprintf("parent sz: %d\n", myproc()->parent->sz);
+
+
+  if (argint(0, &retval) < 0) {
+    cprintf("Something wrong with thread exit\n");
     return -1;
   }
 
-  thread_exit(retval);
+  cprintf("Thread EXIT\n");
+
+  texit((void *) retval);
+
   return 0;
 }

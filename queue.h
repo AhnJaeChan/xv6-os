@@ -22,6 +22,7 @@ void queue_clear(queue_t *);
 
 int enqueue(queue_t *, struct proc *);
 struct proc *dequeue(queue_t *);
+struct proc *queue_front(queue_t*);
 
 int queue_delete(queue_t *, struct proc *);
 int queue_search(queue_t *, struct proc *);

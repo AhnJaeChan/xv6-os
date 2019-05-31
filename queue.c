@@ -44,6 +44,10 @@ struct proc *dequeue(queue_t *q) {
   return p;
 }
 
+struct proc *queue_front(queue_t *q) {
+  return q->size == 0 ? NULL : q->parr[q->front];
+}
+
 int queue_delete(queue_t *q, struct proc *p) {
   int idx, i;
 

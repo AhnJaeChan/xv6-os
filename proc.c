@@ -15,8 +15,6 @@ int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
 
-static void wakeup1(void *chan);
-
 void
 printproc(struct proc *p) {
   if (p == NULL) {
@@ -24,7 +22,8 @@ printproc(struct proc *p) {
   }
 
   if (p->type == STRIDE || p->type == DEFAULT) {
-    cprintf("[STRIDE] (%d): pass: %d, stride: %d, state: %d %s\n", p->pid, p->stride_config.pass,
+    cprintf("[%s] (%d): pass: %d, stride: %d, state: %d %s\n", p->type == STRIDE ? "STRIDE" : "DEFAULT", p->pid,
+            p->stride_config.pass,
             p->stride_config.stride,
             p->state, p == mlfqproc ? "MLFQ" : "");
   } else {
@@ -36,7 +35,8 @@ printproc(struct proc *p) {
 void printqueue(queue_t *q) {
   int i;
   for (i = 0; i < q->size; ++i) {
-    cprintf("(%d) -> ", q->parr[(q->front + i) % QUEUE_SIZE]->pid);
+    cprintf("(%d - %d) -> ", q->parr[(q->front + i) % QUEUE_SIZE]->pid,
+            q->parr[(q->front + i) % QUEUE_SIZE]->parent->pid);
   }
   cprintf("\n");
 }
@@ -170,8 +170,6 @@ found:
   }
 
   p->is_thread = 0;
-  p->thread_config = thread_alloc_config(p);
-  enqueue(&p->threads, p); // Enqueue main thread
 
   return p;
 }
@@ -250,6 +248,10 @@ growproc(int n) {
   uint sz;
   struct proc *curproc = myproc();
 
+  if (curproc->is_thread) {
+    curproc = curproc->parent;
+  }
+
   sz = curproc->sz;
   if (n > 0) {
     if ((sz = allocuvm(curproc->pgdir, sz, sz + n)) == 0)
@@ -259,6 +261,9 @@ growproc(int n) {
       return -1;
   }
   curproc->sz = sz;
+
+
+
   switchuvm(curproc);
   return 0;
 }
@@ -328,10 +333,30 @@ void
 exit(void) {
   struct proc *curproc = myproc();
   struct proc *p;
-  int fd;
+  int fd, i;
 
   if (curproc == initproc)
     panic("init exiting");
+
+  if (curproc->is_thread) {
+    curproc = curproc->parent;
+  }
+
+  // Close all open files in threads.
+  for (i = 0; i < curproc->threads.size; ++i) {
+    p = curproc->threads.parr[(curproc->threads.front + i) % QUEUE_SIZE];
+    for (fd = 0; fd < NOFILE; fd++) {
+      if (p->ofile[fd]) {
+        fileclose(p->ofile[fd]);
+        p->ofile[fd] = 0;
+      }
+    }
+
+    begin_op();
+    iput(p->cwd);
+    end_op();
+    p->cwd = 0;
+  }
 
   // Close all open files.
   for (fd = 0; fd < NOFILE; fd++) {
@@ -347,6 +372,26 @@ exit(void) {
   curproc->cwd = 0;
 
   acquire(&ptable.lock);
+
+  while ((p = queue_front(&curproc->threads)) != NULL) {
+    thread_clear(p);
+
+    // Delete from parent thread queue
+    dequeue(&curproc->threads);
+
+    if (p->type == MLFQ) {
+      if (mlfq_delete(&pmlfq, p) == 0) {
+        mlfq_init_config(&p->mlfq_config);
+      }
+    } else {
+      heap_delete(&pheap, p);
+
+      // Rearrange tickets due to total ticket count change
+      pheap.share -= p->stride_config.share; // DEFAULT has 0 for share
+      p->stride_config.share = 0;
+      stride_rearrange(&pheap);
+    }
+  }
 
   // Parent might be sleeping in wait().
   wakeup1(curproc->parent);
@@ -434,7 +479,7 @@ wait(void) {
 //      via swtch back to the scheduler.
 void
 scheduler(void) {
-  struct proc *p, *parent, *tparent;
+  struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
 
@@ -443,40 +488,44 @@ scheduler(void) {
 
     acquire(&ptable.lock);
 
-    parent = tparent = heap_peek(&pheap);
+    p = heap_peek(&pheap);
 
-    if (parent == NULL) {
+    if (p == NULL) {
       goto release;
     }
 
-    if (parent == mlfqproc) {
-      tparent = mlfq_pop(&pmlfq);
+    if (p == mlfqproc) {
+      // Increment pass by stride.
+      heap_set_pass(&pheap, 0, p->stride_config.pass + p->stride_config.stride);
 
-      if (tparent == NULL) {
-        heap_set_pass(&pheap, 0, parent->stride_config.pass + parent->stride_config.stride);
+      // Dequeue one from the pmlfq
+      p = mlfq_pop(&pmlfq);
+
+      // MLFQ is empty
+      if (p == NULL) {
         goto release;
       }
-    }
 
-    p = dequeue(&tparent->threads);
-    enqueue(&tparent->threads, p);
+      if (p->state != RUNNABLE) {
+        mlfq_downlevel(&pmlfq, p);
+        goto release;
+      }
 
-    if (p->state != RUNNABLE) {
-      heap_set_pass(&pheap, 0, parent->stride_config.pass + parent->stride_config.stride);
-      goto release;
-    }
-
-    if (tparent->type == MLFQ) {
-      if (tparent->mlfq_config.allotment >= pmlfq.queue[tparent->mlfq_config.level].allotment) {
+      if (p->mlfq_config.allotment >= pmlfq.queue[p->mlfq_config.level].allotment) {
         // Go down level
-        mlfq_downlevel(&pmlfq, tparent);
+        mlfq_downlevel(&pmlfq, p);
       } else {
         // Round Robin
-        mlfq_round_robin(&pmlfq, tparent);
+        mlfq_round_robin(&pmlfq, p);
       }
-    }
+    } else {
+      if (p->state != RUNNABLE) {
+        goto release;
+      }
 
-    heap_set_pass(&pheap, 0, parent->stride_config.pass + parent->stride_config.stride);
+      // Increment pass by stride.
+      heap_set_pass(&pheap, 0, p->stride_config.pass + p->stride_config.stride);
+    }
 
     // Switch to chosen process.  It is the process's job
     // to release ptable.lock and then reacquire it
@@ -578,13 +627,13 @@ sleep(void *chan, struct spinlock *lk) {
     panic("MLFQ  sleeping");
   }
 
+  if (p->type != MLFQ) {
+    heap_set_pass(&pheap, heap_search(&pheap, p), INFINITE);
+  }
+
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
-
-  printproc(p);
-  printqueue(&p->threads);
-  printsched();
 
   sched();
 
@@ -601,7 +650,7 @@ sleep(void *chan, struct spinlock *lk) {
 //PAGEBREAK!
 // Wake up all processes sleeping on chan.
 // The ptable lock must be held.
-static void
+void
 wakeup1(void *chan) {
   struct proc *p;
   int idx;

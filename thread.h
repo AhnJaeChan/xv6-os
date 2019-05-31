@@ -22,8 +22,4 @@ typedef struct thread_config_t {
 void thread_init_config(thread_config_t *);
 thread_config_t *thread_alloc_config(struct proc *);
 
-int thread_create(thread_t *, void *(void *), void *);
-int thread_join(thread_t, void **);
-void thread_exit(void *);
-
 #endif //XV6_PUBLIC_THREAD_H

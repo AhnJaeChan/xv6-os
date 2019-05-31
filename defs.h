@@ -126,6 +126,7 @@ void            strideinit(void);
 void            mlfqinit(void);
 int             wait(void);
 void            wakeup(void*);
+void            wakeup1(void*);
 void            swapproc(struct proc **, struct proc **);
 void            yield(void);
 int             cpu_share(int);
@@ -137,6 +138,12 @@ void            printqueue(struct queue_t *);
 void            printmlfq(struct mlfq_t *);
 void            printheap(struct heap_t *);
 void            printsched(void);
+
+// thread.c
+int             tcreate(thread_t*, void *(void *), void*);
+int             tjoin(thread_t, void**);
+void            texit(void*);
+int             thread_clear(struct proc *);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

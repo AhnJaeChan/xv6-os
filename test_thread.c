@@ -9,16 +9,25 @@
 int cnt = 0;
 
 void *foo() {
+  int ret;
+
   cnt++;
-  thread_exit(0);
+  thread_exit(&ret);
+
+  printsched();
+
   return 0;
 }
 
 int main() {
   thread_t t;
-  thread_create(&t, foo, 0);
-  printf(1, "thread id: %d created\n", t);
-  thread_join(t, 0);
+  int result;
+  if ((result = thread_create(&t, foo, 0)) > 0) {
+    printf(1, "[%d] thread id: %d created\n", result, t);
+  }
+
+  while (1);
+//  thread_join(t, 0);
   printf(1, "cnt: %d\n", cnt);
   exit();
 }
