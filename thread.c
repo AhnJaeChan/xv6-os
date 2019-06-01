@@ -58,7 +58,6 @@ int thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg) {
   thread_config_t *config;
 
   if ((np = allocproc()) == 0) {
-    printproc(np);
     return -1;
   }
 
@@ -81,13 +80,14 @@ int thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg) {
       thread_init_config(config);
       goto tbad;
     }
-    clearpteu(parent->pgdir, (char *) (parent->sz - 2 * PGSIZE));
+    clearpteu(parent->pgdir, (char *) (sz - 2 * PGSIZE));
 
-    config->sp = sp = parent->sz; // Set the process's new size
+    config->sp = sp = sz; // Set the process's new size
     config->valid = 1;
   } else {
     sp = config->sp;
   }
+  parent->sz = sz;
   config->thread = np;
   np->thread_config = config;
 
@@ -135,7 +135,6 @@ int thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg) {
     np->stride_config.pass = heap_peek_pass(&pheap);
     heap_push(&pheap, np);
 
-    // Rearrange tickets for shared portions.
     if (pheap.share != 0) {
       stride_rearrange(&pheap);
     }
@@ -149,6 +148,39 @@ int thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg) {
 
 tbad:
   return -1;
+}
+
+void thread_exit(void *retval) {
+  struct proc *thread = myproc();
+  int fd;
+
+  if (!thread->is_thread) {
+    exit();
+  }
+
+  thread->thread_config->retval = retval;
+
+  // Close all open files.
+  for (fd = 0; fd < NOFILE; fd++) {
+    if (thread->ofile[fd]) {
+      fileclose(thread->ofile[fd]);
+      thread->ofile[fd] = 0;
+    }
+  }
+
+  begin_op();
+  iput(thread->cwd);
+  end_op();
+  thread->cwd = 0;
+
+  acquire(&ptable.lock);
+
+  // Main thread might be sleeping in thread_join().
+  wakeup1(thread->parent);
+
+  thread->state = ZOMBIE;
+
+  sched();
 }
 
 int thread_join(thread_t thread, void **retval) {
@@ -173,35 +205,19 @@ int thread_join(thread_t thread, void **retval) {
     }
 
     if (p->state == ZOMBIE) {
-      if (retval != NULL) {
-        *retval = p->thread_config->retval;
-      }
-
-      // Deschedule thread
-      if (p->type == MLFQ) {
-        if (mlfq_delete(&pmlfq, p) == 0) {
-          mlfq_init_config(&p->mlfq_config);
-        }
-      } else {
-        heap_delete(&pheap, p);
-
-        // Rearrange tickets due to total ticket count change
-        pheap.share -= p->stride_config.share; // DEFAULT has 0 for share
-        p->stride_config.share = 0;
-        stride_rearrange(&pheap);
-      }
-
-      stride_init_config(&p->stride_config);
-      mlfq_init_config(&p->mlfq_config);
+      // Set up return value
+      *retval = p->thread_config->retval;
 
       // Clear thread
       thread_clear(p);
+      deschedule(p);
 
       release(&ptable.lock);
       return 0;
     }
 
     if (parent->killed) {
+      release(&ptable.lock);
       return -1;
     }
 
@@ -210,38 +226,23 @@ int thread_join(thread_t thread, void **retval) {
   }
 }
 
-void thread_exit(void *retval) {
-  struct proc *thread = myproc();
-  int fd;
+int thread_kill_all(struct proc *parent) {
+  struct proc *thread;
+  int i;
 
-  if (!thread->is_thread) {
-    exit();
+  // Only handle processes
+  if (parent == NULL || parent->is_thread) {
+    return -1;
   }
 
-  // Close all open files.
-  for (fd = 0; fd < NOFILE; fd++) {
-    if (thread->ofile[fd]) {
-      fileclose(thread->ofile[fd]);
-      thread->ofile[fd] = 0;
+  for (i = 0; i < MAX_THREADS; ++i) {
+    thread = parent->thread_pool[i].thread;
+    if (thread != NULL && thread->state == ZOMBIE) {
+      thread_clear(thread);
+      deschedule(thread);
     }
   }
-
-  printproc(thread);
-  begin_op();
-  iput(thread->cwd);
-  end_op();
-  thread->cwd = 0;
-
-  thread->thread_config->retval = retval;
-
-  acquire(&ptable.lock);
-
-  thread->state = ZOMBIE;
-
-  // Main thread might be sleeping in thread_join().
-  wakeup1(thread->parent);
-
-  sched();
+  return 0;
 }
 
 int thread_clear(struct proc *thread) {
@@ -249,6 +250,7 @@ int thread_clear(struct proc *thread) {
 
   thread->thread_config->thread = NULL;
   thread->thread_config->state = FREE;
+  thread->thread_config = NULL;
 
   // Found one.
   pid = thread->pid;
