@@ -132,6 +132,7 @@ void            yield(void);
 int             cpu_share(int);
 int             run_MLFQ(void);
 int             getlev(void);
+void            deschedule(struct proc *);
 
 void            printproc(struct proc *);
 void            printqueue(struct queue_t *);
