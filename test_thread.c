@@ -34,7 +34,7 @@ int main() {
 #include "user.h"
 
 #define NUM_THREAD 10
-#define NTEST 1
+#define NTEST 5
 
 // Show race condition
 int racingtest(void);
@@ -51,18 +51,18 @@ int gcnt;
 int gpipe[2];
 
 int (*testfunc[NTEST])(void) = {
-//    racingtest,
+    racingtest,
     basictest,
-//    jointest1,
-//    jointest2,
-//    stresstest,
+    jointest1,
+    jointest2,
+    stresstest,
 };
 char *testname[NTEST] = {
-//    "racingtest",
+    "racingtest",
     "basictest",
-//    "jointest1",
-//    "jointest2",
-//    "stresstest",
+    "jointest1",
+    "jointest2",
+    "stresstest",
 };
 
 int
@@ -156,13 +156,12 @@ void *
 basicthreadmain(void *arg) {
   int tid = (int) arg;
   int i;
-  for (i = 0; i < 100000000; i++) {
-    if (i % 20000000 == 0) {
+  for (i = 0; i < 10000000; i++) {
+    if (i % 2000000 == 0) {
       printf(1, "%d", tid);
     }
   }
 
-  printf(1,"\nExit i: %d\n", tid);
   thread_exit((void *) (tid + 1));
   return 0;
 }
@@ -173,20 +172,20 @@ basictest(void) {
   int i;
   void *retval;
 
-  printf(1, "basic join!!!\n");
   for (i = 0; i < NUM_THREAD; i++) {
     if (thread_create(&threads[i], basicthreadmain, (void *) i) != 0) {
       printf(1, "panic at thread_create\n");
       return -1;
     }
   }
+
+  printf(1, "basic join!!!\n");
   for (i = 0; i < NUM_THREAD; i++) {
     if (thread_join(threads[i], &retval) != 0 || (int) retval != i + 1) {
-      printf(1, "panic at thread_join\n");
+      printf(1, "[%d != %d] panic at thread_join\n", i + 1, (int) retval);
       return -1;
     }
   }
-  printf(1, "basic join done!!!\n");
   printf(1, "\n");
   return 0;
 }
