@@ -2,33 +2,6 @@
 // Created by 안재찬 on 2019-05-29.
 //
 
-
-/*
-#include "types.h"
-#include "stat.h"
-#include "user.h"
-
-int cnt = 0;
-
-void *foo(void *arg) {
-  int tid = (int)arg;
-  cnt++;
-  thread_exit((void*)(tid+1));
-  return 0;
-}
-
-int main() {
-  thread_t t;
-  void *retval;
-  int i = 3;
-  thread_create(&t, foo, (void*)i);
-  thread_join(t, &retval);
-  printf(1, "cnt: %d\n", cnt);
-  printf(1, "retval: %d\n", (int)retval);
-  exit();
-}
-*/
-
 #include "types.h"
 #include "stat.h"
 #include "user.h"
