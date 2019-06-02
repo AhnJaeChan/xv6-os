@@ -87,7 +87,6 @@ int thread_create(thread_t *thread, void *(*start_routine)(void *), void *arg) {
   } else {
     sp = config->sp;
   }
-  parent->sz = sz;
   config->thread = np;
   np->thread_config = config;
 
@@ -226,6 +225,8 @@ int thread_join(thread_t thread, void **retval) {
   }
 }
 
+// Should be called with ptable.lock acquired.
+// After call, release should be handled also.
 int thread_kill_all(struct proc *parent) {
   struct proc *thread;
   int i;
@@ -236,8 +237,7 @@ int thread_kill_all(struct proc *parent) {
   }
 
   for (i = 0; i < MAX_THREADS; ++i) {
-    thread = parent->thread_pool[i].thread;
-    if (thread != NULL && thread->state == ZOMBIE) {
+    if ((thread = parent->thread_pool[i].thread) != NULL) {
       thread_clear(thread);
       deschedule(thread);
     }
