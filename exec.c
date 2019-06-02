@@ -98,39 +98,26 @@ exec(char *path, char **argv) {
       last = s + 1;
   safestrcpy(curproc->name, last, sizeof(curproc->name));
 
-  acquire(&ptable.lock);
+  if (curproc->is_thread) {
+    // Detach current thread from the parent and
+    // work as a general purpose process
+    acquire(&ptable.lock);
 
-//  for (i = 0; i < MAX_THREADS; ++i) {
-//    if (parent->thread_pool[i].thread != NULL) {
-//      parent->thread_pool[i].thread->state = ZOMBIE;
-//    }
-//  }
-//  thread_kill_all(parent);
-//  for (i = 0; i < MAX_THREADS; ++i) {
-//    thread_init_config(&parent->thread_pool[i]);
-//  }
+    curproc->thread_config->thread = NULL;
+    curproc->thread_config->state = FREE;
+    curproc->thread_config = NULL;
+    curproc->state = RUNNABLE;
+    curproc->is_thread = 0;
+    curproc->pid = parent->pid;
+    curproc->parent = initproc;
 
-  release(&ptable.lock);
+    // Initialize thread pool
+    for (i = 0; i < MAX_THREADS; ++i) {
+      thread_init_config(&curproc->thread_pool[i]);
+    }
 
-//  if (curproc->is_thread) {
-//    // Detach current thread from the parent and
-//    // work as a general purpose process
-//    acquire(&ptable.lock);
-//
-//    curproc->thread_config->thread = NULL;
-//    curproc->thread_config->state = FREE;
-//    curproc->thread_config = NULL;
-//    curproc->state = RUNNABLE;
-//    curproc->is_thread = 0;
-//    curproc->parent = initproc;
-//
-//    // Initialize thread pool
-//    for (i = 0; i < MAX_THREADS; ++i) {
-//      thread_init_config(&curproc->thread_pool[i]);
-//    }
-//
-//    release(&ptable.lock);
-//  }
+    release(&ptable.lock);
+  }
 
   // Commit to the user image.
   oldpgdir = curproc->pgdir;

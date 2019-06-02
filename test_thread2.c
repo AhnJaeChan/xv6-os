@@ -3,7 +3,7 @@
 #include "user.h"
 
 #define NUM_THREAD 10
-#define NTEST 1
+#define NTEST 15
 
 // Show race condition
 int racingtest(void);
@@ -45,36 +45,36 @@ volatile int gcnt;
 int gpipe[2];
 
 int (*testfunc[NTEST])(void) = {
-//  racingtest,
-//  basictest,
-//  jointest1,
-//  jointest2,
-//  stresstest,
-//  exittest1,
-//  exittest2,
-//  forktest,
-  exectest, // shell re-init
-//  sbrktest,
-//  killtest,
-//  pipetest,
-//  sleeptest,
-//  stridetest, // share is not working, same for every thread [REASON]: thread initialization is done through default stride
+  racingtest,
+  basictest,
+  jointest1,
+  jointest2,
+  stresstest,
+  exittest1,
+  exittest2,
+  forktest,
+  exectest, // zombie, don't know why...
+  sbrktest,
+  killtest,
+  pipetest,
+  sleeptest,
+  stridetest, // share is not working, same for every thread [REASON]: thread initialization is done through default stride
 };
 char *testname[NTEST] = {
-//  "racingtest",
-//  "basictest",
-//  "jointest1",
-//  "jointest2",
-//  "stresstest",
-//  "exittest1",
-//  "exittest2",
-//  "forktest",
+  "racingtest",
+  "basictest",
+  "jointest1",
+  "jointest2",
+  "stresstest",
+  "exittest1",
+  "exittest2",
+  "forktest",
   "exectest",
-//  "sbrktest",
-//  "killtest",
-//  "pipetest",
-//  "sleeptest",
-//  "stridetest",
+  "sbrktest",
+  "killtest",
+  "pipetest",
+  "sleeptest",
+  "stridetest",
 };
 
 int

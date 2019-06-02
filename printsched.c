@@ -7,10 +7,6 @@
 #include "user.h"
 
 int main() {
-//  printsched();
-  char *args[3] = {"test_thread", "echo is executed!", 0};
   printsched();
-  exec("test_thread", args);
-  printf(1, "printsched?\n");
   exit();
 }

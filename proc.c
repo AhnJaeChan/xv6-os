@@ -697,10 +697,16 @@ kill(int pid) {
 
       // Wake process from sleep if necessary.
       if (p->state == SLEEPING) {
-        // Set pass to top
-        idx = heap_search(&pheap, p);
-        if (idx != -1) {
-          heap_set_pass(&pheap, idx, heap_peek_pass(&pheap));
+        if (p->type == MLFQ) {
+          // Push to front
+          mlfq_delete(&pmlfq, p);
+          mlfq_push(&pmlfq, p);
+        } else {
+          // Set pass to top
+          idx = heap_search(&pheap, p);
+          if (idx != -1) {
+            heap_set_pass(&pheap, idx, heap_peek_pass(&pheap));
+          }
         }
 
         p->state = RUNNABLE;
@@ -790,7 +796,6 @@ int cpu_share(int x) {
   pheap.share = share + x;
   stride_set_share(p, x);
   stride_rearrange(&pheap);
-  printheap(&pheap);
 
   release(&ptable.lock);
 

@@ -50,8 +50,6 @@ main(int argc, char *argv[]) {
   if (argc >= 3)
     end = atoi(argv[2]);
 
-  printf(1, "%d\n", getppid());
-
   for (i = start; i <= end; i++) {
     printf(1, "%d. %s start\n", i, testname[i]);
     if (pipe(gpipe) < 0) {
