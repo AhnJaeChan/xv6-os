@@ -23,7 +23,7 @@ typedef struct thread_config_t {
 
 void thread_init_config(thread_config_t *);
 thread_config_t *thread_alloc_config(struct proc *);
-
+struct proc *thread_fetch(struct proc *, thread_t);
 int thread_create(thread_t *, void *(void *), void *);
 int thread_join(thread_t, void **);
 void thread_exit(void *);

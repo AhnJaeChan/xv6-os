@@ -197,10 +197,10 @@ int thread_join(thread_t thread, void **retval) {
     // if it's zombie, clear out its variables and set the thread_config's state to free
     p = thread_fetch(parent, thread);
 
-    // Error, we don't have any matching thread.
+    // Join called on a non-existing thread.
     if (p == NULL) {
       release(&ptable.lock);
-      return -1;
+      return 0;
     }
 
     if (p->state == ZOMBIE) {
@@ -228,6 +228,7 @@ int thread_join(thread_t thread, void **retval) {
 // Should be called with ptable.lock acquired.
 // After call, release should be handled also.
 int thread_kill_all(struct proc *parent) {
+  struct proc *curproc = myproc();
   struct proc *thread;
   int i;
 
@@ -237,7 +238,7 @@ int thread_kill_all(struct proc *parent) {
   }
 
   for (i = 0; i < MAX_THREADS; ++i) {
-    if ((thread = parent->thread_pool[i].thread) != NULL) {
+    if ((thread = parent->thread_pool[i].thread) != NULL && thread != curproc) {
       thread_clear(thread);
       deschedule(thread);
     }

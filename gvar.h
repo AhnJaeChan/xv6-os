@@ -14,5 +14,6 @@ ptable_t ptable;
 mlfq_t pmlfq;
 heap_t pheap;
 struct proc *mlfqproc;
+struct proc *initproc;
 
 #endif //XV6_PUBLIC_GVAR_H

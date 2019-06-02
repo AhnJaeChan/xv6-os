@@ -9,8 +9,6 @@
 #include "gvar.h"
 
 
-static struct proc *initproc;
-
 int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
@@ -319,6 +317,7 @@ fork(void) {
 
   acquire(&ptable.lock);
 
+  // Schedule the forked process
   if (curproc->type == MLFQ) {
     mlfq_push(&pmlfq, np);
   } else {
