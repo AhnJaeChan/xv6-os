@@ -23,8 +23,10 @@ printproc(struct proc *p) {
   }
 
   if (p->type == STRIDE || p->type == DEFAULT) {
-    cprintf("[%s] (%d): pass: %d, stride: %d, state: %d, type: %s\t%s\n", p->type == STRIDE ? "STRIDE" : "DEFAULT",
+    cprintf("[%s] (%d): share: %d, pass: %d, stride: %d, state: %d, type: %s\t%s\n",
+            p->type == STRIDE ? "STRIDE" : "DEFAULT",
             p->pid,
+            p->stride_config.share,
             p->stride_config.pass,
             p->stride_config.stride,
             p->state,
@@ -36,24 +38,6 @@ printproc(struct proc *p) {
   }
 }
 
-void printqueue(queue_t *q) {
-  int i;
-  for (i = 0; i < q->size; ++i) {
-    cprintf("(%d - %d) -> ", q->parr[(q->front + i) % QUEUE_SIZE]->pid,
-            q->parr[(q->front + i) % QUEUE_SIZE]->parent->pid);
-  }
-  cprintf("\n");
-}
-
-void printmlfq(mlfq_t *mlfq) {
-  int i;
-  for (i = 0; i < MLFQ_LEVELS; ++i) {
-    cprintf("[LEVEL %d]: ", i);
-    printqueue(&mlfq->queue[i]);
-  }
-  cprintf("\n");
-}
-
 void printheap(heap_t *heap) {
   int i;
 
@@ -61,6 +45,29 @@ void printheap(heap_t *heap) {
   for (i = 0; i < heap->sz; ++i) {
     cprintf("[%d] ", i);
     printproc(heap->parr[i]);
+  }
+  cprintf("\n");
+}
+
+void printqueue(queue_t *q) {
+  int i;
+  if (q->size == 0) {
+    cprintf("EMPTY\n");
+    return;
+  }
+
+  for (i = 0; i < q->size; ++i) {
+    cprintf("(%d) -> ", q->parr[(q->front + i) % QUEUE_SIZE]->pid);
+  }
+  cprintf("\n");
+}
+
+void printmlfq(mlfq_t *mlfq) {
+  int i;
+  cprintf("-----MLFQ-----\n");
+  for (i = 0; i < MLFQ_LEVELS; ++i) {
+    cprintf("[LEVEL %d]: ", i);
+    printqueue(&mlfq->queue[i]);
   }
   cprintf("\n");
 }
@@ -248,7 +255,7 @@ growproc(int n) {
   uint sz, i;
   struct proc *curproc = myproc();
 
-  while (curproc->is_thread) {
+  if (curproc->is_thread) {
     curproc = curproc->parent;
   }
 
@@ -263,12 +270,13 @@ growproc(int n) {
   curproc->sz = sz;
 
   for (i = 0; i < MAX_THREADS; ++i) {
-      if (curproc->thread_pool[i].thread) {
+    if (curproc->thread_pool[i].thread) {
       curproc->thread_pool[i].thread->sz = curproc->sz;
     }
   }
 
-  switchuvm(curproc);
+  switchuvm(myproc());
+
   return 0;
 }
 
@@ -342,14 +350,26 @@ exit(void) {
   if (curproc == initproc)
     panic("init exiting");
 
+  // If kill is called on thread, make the parent exit.
   if (curproc->is_thread) {
-    curproc = curproc->parent;
+    // Kill makes the parent move to top of the scheduler.
+    kill(curproc->parent->pid);
+
+    acquire(&ptable.lock);
+
+    for (i = 0; i < MAX_THREADS; ++i) {
+      if ((p = curproc->parent->thread_pool[i].thread) != NULL) {
+        p->state = ZOMBIE;
+      }
+    }
+
+    sched();
+    panic("zombie thread");
   }
 
   // Close all open files in every thread.
   for (i = 0; i < MAX_THREADS; ++i) {
-    p = curproc->thread_pool[i].thread;
-    if (p != NULL && p->state != ZOMBIE) {
+    if ((p = curproc->thread_pool[i].thread) != NULL) {
       for (fd = 0; fd < NOFILE; fd++) {
         if (p->ofile[fd]) {
           fileclose(p->ofile[fd]);
@@ -357,6 +377,7 @@ exit(void) {
         }
       }
 
+      begin_op();
       iput(p->cwd);
       end_op();
       p->cwd = 0;
@@ -378,9 +399,8 @@ exit(void) {
 
   acquire(&ptable.lock);
 
-  // Set every thread  to zombie
   for (i = 0; i < MAX_THREADS; ++i) {
-    if ((p = curproc->thread_pool[i].thread) != NULL) {
+    if ((p = curproc->parent->thread_pool[i].thread) != NULL) {
       p->state = ZOMBIE;
     }
   }
@@ -402,6 +422,7 @@ exit(void) {
 
   // Jump into the scheduler, never to return.
   curproc->state = ZOMBIE;
+
   sched();
   panic("zombie exit");
 }
@@ -426,8 +447,6 @@ wait(void) {
         if (!p->is_thread) {
           // Kill all the threads
           thread_kill_all(p);
-        } else {
-          cprintf("@@ TOAST\n");
         }
 
         // Found one.
@@ -671,10 +690,15 @@ kill(int pid) {
   acquire(&ptable.lock);
   for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
     if (p->pid == pid) {
+      if (p->is_thread) {
+        p = p->parent;
+      }
+
       p->killed = 1;
+
       // Wake process from sleep if necessary.
       if (p->state == SLEEPING) {
-        // Set pass before re-entering the heap
+        // Set pass to top
         idx = heap_search(&pheap, p);
         if (idx != -1) {
           heap_set_pass(&pheap, idx, heap_peek_pass(&pheap));
@@ -682,6 +706,7 @@ kill(int pid) {
 
         p->state = RUNNABLE;
       }
+
       release(&ptable.lock);
       return 0;
     }
@@ -766,6 +791,7 @@ int cpu_share(int x) {
   pheap.share = share + x;
   stride_set_share(p, x);
   stride_rearrange(&pheap);
+  printheap(&pheap);
 
   release(&ptable.lock);
 
