@@ -230,8 +230,6 @@ getlognum(void) {
   return log.lh.n;
 }
 
-// Must be called with log.lock released.
-// This is due to the fact that commit() doesn't except it.
 int
 fsync(void) {
   // Flush all the in memory data blocks to on disk
