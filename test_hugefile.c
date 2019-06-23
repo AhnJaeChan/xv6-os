@@ -30,7 +30,7 @@ main(int argc, char *argv[]) {
   fd = open(path, O_CREATE | O_RDWR);
   for (i = 0; i < BLOCK_NUM; i++) {
     if (i % 100 == 0) {
-//      printf(1, "%d bytes written\n", i * BLOCK_SIZE);
+      printf(1, "%d bytes written\n", i * BLOCK_SIZE);
     }
     if ((r = write(fd, data, sizeof(data))) != sizeof(data)) {
       printf(1, "write returned %d : failed\n", r);
@@ -47,7 +47,7 @@ main(int argc, char *argv[]) {
   fd = open(path, O_RDONLY);
   for (i = 0; i < BLOCK_NUM; i++) {
     if (i % 100 == 0) {
-//      printf(1, "%d bytes read\n", i * BLOCK_SIZE);
+      printf(1, "%d bytes read\n", i * BLOCK_SIZE);
     }
     if ((r = read(fd, buf, sizeof(data))) != sizeof(data)) {
       printf(1, "read returned %d : failed\n", r);
@@ -78,7 +78,7 @@ main(int argc, char *argv[]) {
     fd = open(path, O_CREATE | O_RDWR);
     for (j = 0; j < BLOCK_NUM; j++) {
       if (j % 100 == 0) {
-//        printf(1, "%d bytes totally written\n", total);
+        printf(1, "%d bytes totally written\n", total);
       }
       if ((r = write(fd, data, sizeof(data))) != sizeof(data)) {
         printf(1, "write returned %d : failed\n", r);

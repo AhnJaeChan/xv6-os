@@ -180,3 +180,14 @@ sys_thread_exit(void) {
 
   return 0;
 }
+
+int
+sys_sync(void) {
+  fsync();
+  return 0;
+}
+
+int
+sys_get_log_num(void) {
+  return getlognum();
+}
