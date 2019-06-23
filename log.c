@@ -124,7 +124,7 @@ begin_op(void) {
   while (1) {
     if (log.committing) {
       sleep(&log, &log.lock);
-    } else if (log.lh.n + (log.outstanding + 1) * MAXOPBLOCKS >= LOGSIZE) {
+    } else if (log.lh.n + (log.outstanding + 1) * MAXOPBLOCKS > LOGSIZE) {
       // For some reason, comparator '>' causes no buffer panic on bget.
       // Couldn't find out why.
       //
@@ -236,13 +236,22 @@ int
 fsync(void) {
   // Flush all the in memory data blocks to on disk
   acquire(&log.lock);
-  log.committing = 1;
-  release(&log.lock);
-  commit();
-  acquire(&log.lock);
-  log.committing = 0;
-  wakeup(&log);
-  release(&log.lock);
+  while (1) {
+    if (log.committing) {
+      // Sleep if something else is committing
+      sleep(&log, &log.lock);
+    } else {
+      // On wakeup, commit all
+      log.committing = 1;
+      release(&log.lock);
+      commit();
+      acquire(&log.lock);
+      log.committing = 0;
+      wakeup(&log);
+      release(&log.lock);
+      break;
+    }
+  }
 
   return 0;
 }

@@ -487,9 +487,12 @@ itrunc(struct inode *ip) {
       if (da[i]) {
         bp = bread(ip->dev, da[i]);
         a = (uint *) bp->data;
-        for (j = 0; j < NINDIRECT; j++)
-          if (a[j])
+
+        for (j = 0; j < NINDIRECT; j++) {
+          if (a[j]){
             bfree(ip->dev, a[j]);
+          }
+        }
         brelse(bp);
         bfree(ip->dev, da[i]);
       }
@@ -507,13 +510,17 @@ itrunc(struct inode *ip) {
       if (ta[i]) {
         dbp = bread(ip->dev, ta[i]);
         da = (uint *) dbp->data;
+
         for (j = 0; j < NINDIRECT; j++) {
           if (da[j]) {
             bp = bread(ip->dev, da[j]);
             a = (uint *) bp->data;
-            for (k = 0; k < NINDIRECT; k++)
-              if (a[k])
+
+            for (k = 0; k < NINDIRECT; k++) {
+              if (a[k]) {
                 bfree(ip->dev, a[k]);
+              }
+            }
             brelse(bp);
             bfree(ip->dev, da[j]);
           }
